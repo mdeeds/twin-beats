@@ -1,7 +1,7 @@
-class SynchronizedClock {
+class SyrenchronizedClock {
   constructor(audioContext, peer) {
-	  this.audioContext = audioContext;
-	  this.syncTimestamp = null;
+    this.audioContext = audioContext;
+    this.syncTimestamp = null;
   }
 
   startSynchronization() {
@@ -11,33 +11,32 @@ class SynchronizedClock {
   }
 
   handleMessage(message) {
-	if (message.type == "sync") {
+  if (message.type == "sync") {
       this.peer.peer.send({ type: "ack", timestamp: this.audioContext.currentTime });
-	} else if (message.type = "ack" && this.syncTimestamp) {
+  } else if (message.type = "ack" && this.syncTimestamp) {
       const localTimestamp = this.audioContext.currentTime;
       this.latency = (localTimestamp - this.syncTimestamp) / 2;
       const remoteTimestamp = message.timestamp + this.latency;
       this.skew = remoteTimestamp - localTimestamp;
-	  console.log(`Latency: ${this.latency}; skew: ${this.skew}`);
-	}
+    console.log(`Latency: ${this.latency}; skew: ${this.skew}`);
+  }
   }
 }
 
 async function populateAudioDevices() {
-	var inputSelect = document.createElement('select');
-	document.body.appendChild(inputSelect);
-	var outputSelect = document.createElement('select');
-	document.body.appendChild(outputSelect);
-	
+  var inputSelect = document.createElement('select');
+  document.body.appendChild(inputSelect);
+  var outputSelect = document.createElement('select');
+  document.body.appendChild(outputSelect);
+  
   try {
-	  
-	navigator.mediaDevices.enumerateDevices()
+    navigator.mediaDevices.enumerateDevices()
     .then((devices) => {
       devices.forEach((device) => {
         console.log(`${device.kind}: ${device.label} id = ${device.deviceId}`);
       });
     });
-	  
+    
     const devices = await navigator.mediaDevices.enumerateDevices();
     const audioInputs = devices.filter(device => device.kind === "audioinput");    
     const audioOutputs = devices.filter(device => device.kind === "audiooutput");
@@ -92,17 +91,17 @@ class Tick {
 
     this.oscillator.connect(this.gainNode);
     this.gainNode.connect(this.audioCtx.destination);
-	this.oscillator.start(this.audioCtx.currentTime);
+  this.oscillator.start(this.audioCtx.currentTime);
   }
 
   play(duration = this.options.duration) {
-	const nowTime = this.audioCtx.currentTime;
+  const nowTime = this.audioCtx.currentTime;
     this.gainNode.gain.linearRampToValueAtTime(
-	  this.options.volume, nowTime+0.01);
+    this.options.volume, nowTime+0.01);
     this.gainNode.gain.linearRampToValueAtTime(
-	  this.options.volume, nowTime + this.options.duration - 0.01);
+    this.options.volume, nowTime + this.options.duration - 0.01);
     this.gainNode.gain.setValueAtTime(
-	  0, nowTime + this.options.duration);
+    0, nowTime + this.options.duration);
   }
 }
 
@@ -111,7 +110,7 @@ var tick = null;
 beatEvent = function() {
   setTimeout(beatEvent, 60 / bpm * 1000);
   if (tick) {
-	  // tick.play();
+    // tick.play();
   }
 }
 class KeyHandler {
@@ -164,6 +163,48 @@ function createCircularButton(keyLetter, callback) {
   return button;
 }
 
+function connectGainNodeToPeerStream(gainNode, peerStream) {
+  const audioContext = gainNode.context;
+  const mediaStreamSource = audioContext.createMediaStreamSource(peerStream);
+
+  // Connect the GainNode to the MediaStreamSource
+  gainNode.connect(mediaStreamSource);
+
+  // Create an AudioDestinationNode (virtual speaker) and connect the MediaStreamSource to it
+  const audioDestination = audioContext.createMediaStreamDestination();
+  mediaStreamSource.connect(audioDestination);
+
+  // Return the MediaStream from the AudioDestinationNode
+  return audioDestination.stream;
+}
+
+function connectPeerStreamToGainNode(peerStream, gainNode) {
+  const audioContext = gainNode.context;
+  const mediaStreamSource = audioContext.createMediaStreamSource(peerStream);
+
+  // Connect the MediaStreamSource directly to the GainNode
+  mediaStreamSource.connect(gainNode);
+}
+
+function getPeerStream(peer) {
+  // Check if the peer has already sent a stream
+  const existingStream = peer.streams.getAudioTracks()[0];
+  if (existingStream) {
+    return existingStream.stream;
+  }
+
+  // If not, request a stream from the peer
+  return new Promise((resolve, reject) => {
+    peer.call(peer.id, stream => {
+      // Handle stream errors
+      stream.on("error", reject);
+
+      // Resolve with the received stream
+      resolve(stream);
+    });
+  });
+}
+
 function createPeerConnection(sessionName) { 
   var sessionId = "hicup-" + sessionName;
   var peer = new Peer();
@@ -171,11 +212,11 @@ function createPeerConnection(sessionName) {
   var conn = peer.connect(sessionId);
   // on open will be launch when you successfully connect to PeerServer
   conn.on('open', function(){
-	// here you have conn.id
-	var idDiv = document.createElement('div');
-	idDiv.innerHTML = "Id: " + conn.id;
-	document.body.appendChild(idDiv);
-	conn.send('hi!');
+  // here you have conn.id
+  var idDiv = document.createElement('div');
+  idDiv.innerHTML = "Id: " + conn.id;
+  document.body.appendChild(idDiv);
+  conn.send('hi!');
   });
 }
 
@@ -230,34 +271,111 @@ function addTrackDivs() {
   document.body.appendChild(containerDiv);
 }
 
-init = function() {
-	// Clear the current document
-	document.body.innerHTML = "";
+async function addPeerHandlers(peer) {
 
-	// Create a container element for the text field and button
-	const container = document.createElement("div");
-	container.classList.add("session-container");
-
-	// Create the button
-	const button = document.createElement("button");
-	button.classList.add("lets-go-button");
-	button.textContent = "Let's Go!";
-	container.appendChild(button);
-
-	// Add the container element to the body
-	document.body.appendChild(container);
-
-	// Add event listener for clicking the button
-	button.addEventListener("click", () => {
-	  // Get the entered session name
-	  document.body.innerHTML = "<div style='display: flex; justify-content: center; align-items: center;'><span>-=- Twin Beats -=-</span></div>";
-	  // populateAudioDevices();
-	  addTrackDivs();
-	  // tick = new Tick(new AudioContext());
-	  beatEvent();
+    var outboundDataConnection = null;
+    
+    return new Promise((resolve, reject) => {
+	peer.on("open", (id) => {
+	    console.log("Connected to PeerJS Server.  My ID is:", id);
+	    resolve();
 	});
+
+        // Connect to the peer with the session ID
+	peer.on("connection", (dataConnection) => {
+	    if (!outboundDataConnection) {
+		peer.connect(dataConnection.peer);
+	    }
+  	  outboundDataConnection = dataConnection;
+            console.log("Peer reached out to me:", dataConnection.peer);
+            dataConnection.on("open", function() {
+		console.log("Connection opened");
+                dataConnection.send({message: 'Hello'});
+	    });
+            dataConnection.on("data", function(data) { console.log(`Recieved data: ${JSON.stringify(data)}`) });
+            dataConnection.on("error", (err) => { console.error("Data connection error: ", err); });
+	});
+
+	// Handle connection errors
+	peer.on("error", (err) => {
+	    console.error("PeerJS connection error:", err);
+	});
+    });
+}
+
+async function connectToSession(sessionId) {
+    // Create a PeerJS instance with a server-generated session ID
+    const peer = new Peer();
+    await addPeerHandlers(peer);
+    // Finally, make the connection.
+    console.log(`Attempting to establish connection with ${sessionId}`);
+    peer.connect(sessionId);
+}
+
+async function createSessionLinkAndPeer(sessionId) {
+  // Create the text box and button
+  const urlContainer = document.createElement("div");
+  const urlInput = document.createElement("input");
+  urlInput.type = "text";
+    urlInput.value = new URL(window.location.href).href + `?sid=${sessionId}`;
+  urlInput.readOnly = true; // Make it read-only
+  const copyButton = document.createElement("button");
+  copyButton.textContent = "Copy URL";
+  copyButton.addEventListener("click", () => {
+    navigator.clipboard.writeText(urlInput.value);
+  });
+  urlContainer.appendChild(urlInput);
+  urlContainer.appendChild(copyButton);
+
+  // Create the PeerJS instance and listen on the session ID
+  const peer = new Peer(sessionId, {
+    // Pass any necessary PeerJS configuration options here
+  });
+  await addPeerHandlers(peer);
+
+  // Add the UI elements to the page
+  document.body.appendChild(urlContainer);
+}
+
+init = function() {
+  // Clear the current document
+  document.body.innerHTML = "";
+
+  // Create a container element for the text field and button
+  const container = document.createElement("div");
+  container.classList.add("session-container");
+
+  // Create the button
+  const button = document.createElement("button");
+  button.classList.add("lets-go-button");
+  button.textContent = "Let's Go!";
+  container.appendChild(button);
+
+  // Add the container element to the body
+  document.body.appendChild(container);
+
+  // Add event listener for clicking the button
+  button.addEventListener("click", () => {
+    // Get the entered session name
+    document.body.innerHTML = "<div style='display: flex; justify-content: center; align-items: center;'><span>-=- Twin Beats -=-</span></div>";
+      // populateAudioDevices();
+
+    // Extract the session ID from the URL query parameters
+    const urlParams = new URLSearchParams(window.location.search);
+    const sessionId = urlParams.get("sid");
+      if (sessionId) {
+	  connectToSession(sessionId);
+      } else {
+	  createSessionLinkAndPeer(`TB${Math.round(Math.random()*10000)}`);
+      }
+
+      
+    addTrackDivs();
+    // tick = new Tick(new AudioContext());
+    beatEvent();
+  });
 }
 
 main = function() {
-	init();
+  init();
 }
