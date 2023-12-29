@@ -1,0 +1,109 @@
+@import url('https://fonts.googleapis.com/css2?family=Bruno+Ace+SC:wght@400;700&display=swap');
+
+body {
+  background-image: linear-gradient(to bottom, #111, #222);
+  font-family: 'Bruno Ace SC', sans-serif;
+  color: #fff;  
+}
+
+button {
+  font-family: inherit;
+  color: inherit;
+}
+
+.track-container {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: center;
+  border: 1px solid #fdd;
+  padding: 5px;
+}
+
+.track-div {
+  width: 90px;
+  margin: 5px;
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  border: 1px solid #ddd;
+  padding: 5px;
+}
+
+.track-button {
+  border: none;
+  background-color: #111;
+  text-align: center;
+  font-size: 16px;
+  width: 60px;
+  height: 60px;
+  border-radius: 30px;
+  border: 1px solid #333;
+  color: #2228;  
+}
+
+.track-slider {
+  /* Remove default horizontal layout */
+  width: 20px; /* Adjust width as needed */
+  height: 180px; /* Adjust height as needed */
+  margin: 0 auto;
+  appearance: slider-vertical;
+  border-radius: 0px;
+  background: #d3d3d3;
+  outline: none;
+}
+
+.stop {
+  background-image: radial-gradient(circle at center, #555, #444, #333);
+}
+
+.play {
+  background-image: radial-gradient(circle at center, #3f3, #3d3, #393);
+}
+
+.record {
+  background-image: radial-gradient(circle at center, #f33, #d33, #933);
+}
+
+.overdub {
+  background-image: radial-gradient(circle at center, #ee3, #cc3, #883);
+}
+
+@keyframes blink-play {
+  0%, 100% {
+    background-image: radial-gradient(circle at center, #555, #444, #333);
+  }
+  50% {
+    background-image: radial-gradient(circle at center, #3f3, #3d3, #393);
+  }
+}
+
+@keyframes blink-record {
+  0%, 100% {
+    background-image: radial-gradient(circle at center, #555, #444, #333);
+  }
+  50% {
+    background-image: radial-gradient(circle at center, #f33, #d33, #933);
+  }
+}
+
+@keyframes blink-overdub {
+  0%, 100% {
+    background-image: radial-gradient(circle at center, #555, #444, #333);
+  }
+  50% {
+   background-image: radial-gradient(circle at center, #ee3, #cc3, #883);
+  }
+}
+
+.play-arm {
+  animation: blink-play 200ms step-end infinite; /* Apply the animation */
+}
+
+.record-arm {
+  animation: blink-record 200ms step-end infinite; /* Apply the animation */
+}
+
+.overdub-arm {
+  animation: blink-overdub 200ms step-end infinite; /* Apply the animation */
+}
