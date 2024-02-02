@@ -1,26 +1,26 @@
-class SyrenchronizedClock {
-  constructor(audioContext, peer) {
-    this.audioContext = audioContext;
-    this.syncTimestamp = null;
-  }
-
-  startSynchronization() {
-    this.peer.peer.on("message", this.handleMessage.bind(this));
-    this.syncTimestamp = this.audioContext.currentTime;
-    this.peer.peer.send({ type: "sync" });
-  }
-
-  handleMessage(message) {
-  if (message.type == "sync") {
-      this.peer.peer.send({ type: "ack", timestamp: this.audioContext.currentTime });
-  } else if (message.type = "ack" && this.syncTimestamp) {
-      const localTimestamp = this.audioContext.currentTime;
-      this.latency = (localTimestamp - this.syncTimestamp) / 2;
-      const remoteTimestamp = message.timestamp + this.latency;
-      this.skew = remoteTimestamp - localTimestamp;
-    console.log(`Latency: ${this.latency}; skew: ${this.skew}`);
-  }
-  }
+class SynchronizedClock {
+    constructor(audioContext, peer) {
+        this.audioContext = audioContext;
+        this.syncTimestamp = null;
+    }
+    
+    startSynchronization() {
+	      this.peer.peer.on("message", this.handleMessage.bind(this));
+	      this.syncTimestamp = this.audioContext.currentTime;
+	      this.peer.peer.send({ type: "sync" });
+    }
+    
+    handleMessage(message) {
+        if (message.type == "sync") {
+            this.peer.peer.send({ type: "ack", timestamp: this.audioContext.currentTime });
+        } else if (message.type = "ack" && this.syncTimestamp) {
+            const localTimestamp = this.audioContext.currentTime;
+            this.latency = (localTimestamp - this.syncTimestamp) / 2;
+            const remoteTimestamp = message.timestamp + this.latency;
+            this.skew = remoteTimestamp - localTimestamp;
+            console.log(`Latency: ${this.latency}; skew: ${this.skew}`);
+        }
+    }
 }
 
 async function populateAudioDevices() {
@@ -78,7 +78,7 @@ class Tick {
       type: "saw", // Default oscillator type
       frequency: 440, // Default frequency in Hz
       volume: 0.05, // Default volume between 0 and 1
-      duration: 0.03, // Default duration in seconds
+      duration: 0.05, // Default duration in seconds
       ...options, // Merge user-provided options
     };
 
@@ -91,28 +91,17 @@ class Tick {
 
     this.oscillator.connect(this.gainNode);
     this.gainNode.connect(this.audioCtx.destination);
-  this.oscillator.start(this.audioCtx.currentTime);
+    this.oscillator.start(this.audioCtx.currentTime);
   }
 
-  play(duration = this.options.duration) {
-  const nowTime = this.audioCtx.currentTime;
-    this.gainNode.gain.linearRampToValueAtTime(
-    this.options.volume, nowTime+0.01);
-    this.gainNode.gain.linearRampToValueAtTime(
-    this.options.volume, nowTime + this.options.duration - 0.01);
-    this.gainNode.gain.setValueAtTime(
-    0, nowTime + this.options.duration);
+  play(startTime) {
+    this.gainNode.gain.setValueAtTime(this.options.volume, startTime);
+    this.gainNode.gain.setValueAtTime(0, nowTime + this.options.duration);
   }
 }
 
 var tick = null;
 
-beatEvent = function() {
-  setTimeout(beatEvent, 60 / bpm * 1000);
-  if (tick) {
-    // tick.play();
-  }
-}
 class KeyHandler {
   constructor() {
     this._pressedKeys = new Set(); // Track currently pressed keys
@@ -142,26 +131,117 @@ class KeyHandler {
 
 var keyHandler = new KeyHandler();
 
-function createCircularButton(keyLetter, callback) {
-  const button = document.createElement("button");
-  button.classList.add("track-button");
+class TrackButton {
+    constructor(keyLetter, buttonGroup, allButtonGroup) {
+        this.state = 'stop';
+        this.hasContent = false;
+        this.buttonGroup = buttonGroup;
+        this.allButtonGroup = allButtonGroup;
+        this.buttonGroup.add(this);
+        this.button = this.createCircularButton(
+            keyLetter, () => { this.changeState(); });
+    }
 
-  // Get the key code based on the letter
-  const key = keyLetter.toLowerCase();
+    changeState() {
+        let nextState = {
+            stop: 'record',
+            record: 'overdub',
+            overdub: 'play',
+            play: 'stop',
+        }[this.state];
+        if (this.hasContent && nextState === 'record') {
+            nextState = 'overdub';
+        }
+        if (nextState === 'record' || nextState === 'overdub') {
+            this.allButtonGroup.stopRecording();
+        }
+        this.buttonGroup.stop();
+        this.setState(nextState);
+    }
 
-  // Set button text and style
-  button.textContent = keyLetter.toUpperCase();
+    setState(nextState) {
+        if (this.state === 'record') {
+            this.button.classList.add('has-content');
+            this.hasContent = true;
+        }
+        this.button.classList.remove(this.state);
+        this.button.classList.add(nextState);
+        this.state = nextState;
+    }
 
-  // Add click event listener to the button
-  button.addEventListener("click", callback);
+    stop() {
+        if (this.state === 'stop') { return; }
+        this.setState('stop');
+    }
 
-  // Register the key code and callback with the KeyHandler
-  keyHandler.register(key, callback);
-  
-  button.classList.add('stop');
+    stopRecording() {
+        if (this.state === 'record' || this.state === 'overdub') {
+            this.setState('play');
+        }
+    }
 
-  return button;
+    getButton() { return this.button; }
+
+    createCircularButton(keyLetter, callback) {
+        const button = document.createElement("button");
+        button.classList.add("track-button");
+        
+        // Get the key code based on the letter
+        const key = keyLetter.toLowerCase();
+        
+        // Set button text and style
+        button.textContent = keyLetter.toUpperCase();
+        
+        // Add click event listener to the button
+        button.addEventListener("click", callback);
+        
+        // Register the key code and callback with the KeyHandler
+        keyHandler.register(key, callback);
+        
+        button.classList.add(this.state);
+        
+        return button;
+    }
 }
+
+class TrackButtonGroup {
+    constructor() {
+        this.buttons = [];
+    }
+    add(trackButton) {
+        this.buttons.push(trackButton);
+    }
+    stop() {
+        for (const b of this.buttons) {
+            b.stop();
+        }
+    }
+    stopRecording() {
+        for (const b of this.buttons) {
+            b.stopRecording();
+        }
+    }
+}
+
+class AllButtonGroup {
+    constructor() {
+        this.buttonGroups = [];
+    }
+    add(trackButtonGroup) {
+        this.buttonGroups.push(trackButtonGroup);
+    }
+    stop() {
+        for (const tbg of this.buttonGroups) {
+            tbg.stop();
+        }
+    }
+    stopRecording() {
+        for (const tbg of this.buttonGroups) {
+            tbg.stopRecording();
+        }        
+    }
+}
+
 
 function connectGainNodeToPeerStream(gainNode, peerStream) {
   const audioContext = gainNode.context;
@@ -186,83 +266,70 @@ function connectPeerStreamToGainNode(peerStream, gainNode) {
   mediaStreamSource.connect(gainNode);
 }
 
-function getPeerStream(peer) {
-  // Check if the peer has already sent a stream
-  const existingStream = peer.streams.getAudioTracks()[0];
-  if (existingStream) {
-    return existingStream.stream;
-  }
+async function getPeerStream(peer) {
+    // If not, request a stream from the peer
+    return new Promise((resolve, reject) => {
+        // Check if the peer has already sent a stream
+        const existingStream = peer.streams.getAudioTracks()[0];
+        if (existingStream) {
+            resolve(existingStream.stream);
+            return;
+        }
+        peer.call(peer.id, stream => {
+            // Handle stream errors
+            stream.on("error", reject);
 
-  // If not, request a stream from the peer
-  return new Promise((resolve, reject) => {
-    peer.call(peer.id, stream => {
-      // Handle stream errors
-      stream.on("error", reject);
-
-      // Resolve with the received stream
-      resolve(stream);
+            // Resolve with the received stream
+            resolve(stream);
+        });
     });
-  });
 }
 
-function createPeerConnection(sessionName) { 
-  var sessionId = "hicup-" + sessionName;
-  var peer = new Peer();
-  // Return the created Peer object for further use
-  var conn = peer.connect(sessionId);
-  // on open will be launch when you successfully connect to PeerServer
-  conn.on('open', function(){
-  // here you have conn.id
-  var idDiv = document.createElement('div');
-  idDiv.innerHTML = "Id: " + conn.id;
-  document.body.appendChild(idDiv);
-  conn.send('hi!');
-  });
-}
+function makeTrackDiv(controlButtons, allButtonGroup) {
+    const trackDiv = document.createElement("div");
+    trackDiv.classList.add("track-div");
+    trackDiv.style.display = "flex"; // Main container as flexbox
+    trackDiv.style.flexDirection = "row";
+    //trackDiv.style.width = "180px";
+    
+    // Create a container for the buttons to ensure vertical layout
+    const buttonContainer = document.createElement("div");
+    buttonContainer.style.display = "flex";
+    buttonContainer.style.flexDirection = "column";
+    buttonContainer.style.alignItems = "center"; // Center buttons vertically
+    buttonContainer.style.flexGrow = 1;
+    trackDiv.appendChild(buttonContainer);
 
-function makeTrackDiv(controlButtons) {
-  const trackDiv = document.createElement("div");
-  trackDiv.classList.add("track-div");
-  trackDiv.style.display = "flex"; // Main container as flexbox
-  trackDiv.style.flexDirection = "row";
-  //trackDiv.style.width = "180px";
+    const buttonGroup = new TrackButtonGroup();
+    allButtonGroup.add(buttonGroup);
+    for (const key of controlButtons) {
+        const tb = new TrackButton(key, buttonGroup, allButtonGroup);
+        buttonContainer.appendChild(tb.getButton());
+    }
 
-  // Create a container for the buttons to ensure vertical layout
-  const buttonContainer = document.createElement("div");
-  buttonContainer.style.display = "flex";
-  buttonContainer.style.flexDirection = "column";
-  buttonContainer.style.alignItems = "center"; // Center buttons vertically
-  buttonContainer.style.flexGrow = 1;
-  trackDiv.appendChild(buttonContainer);
-
-  for (const key of controlButtons) {
-    const button = createCircularButton(key, () => {
-      console.log(`Pressed: ${key}`);
-    });
-    buttonContainer.appendChild(button);
-  }
-
-  // Create the vertical slider
-  const slider = document.createElement("input");
-  slider.type = "range";
-  slider.min = 0;
-  slider.max = 1000;
-  slider.value = 1000;
-  slider.classList.add("track-slider");
-  trackDiv.appendChild(slider);
-
-  return trackDiv;
+    // Create the vertical slider
+    const slider = document.createElement("input");
+    slider.type = "range";
+    slider.min = 0;
+    slider.max = 1000;
+    slider.value = 1000;
+    slider.classList.add("track-slider");
+    trackDiv.appendChild(slider);
+    
+    return trackDiv;
 }
 
 function addTrackDivs() {
   // Create the container div
   const containerDiv = document.createElement("div");
-  containerDiv.classList.add("track-container");
+    containerDiv.classList.add("track-container");
+
+    const allButtonGroup = new AllButtonGroup();
 
   // Loop through the number of tracks
   for (controls of ['1qaz','2wsx','3edc','4rfv', '5tgb']) {
     // Create a track div using the provided function
-    const trackDiv = makeTrackDiv(controls);
+      const trackDiv = makeTrackDiv(controls, allButtonGroup);
     // Add the track div to the container
     containerDiv.appendChild(trackDiv);
   }
@@ -272,34 +339,44 @@ function addTrackDivs() {
 }
 
 async function addPeerHandlers(peer) {
-
     var outboundDataConnection = null;
     
     return new Promise((resolve, reject) => {
-	peer.on("open", (id) => {
-	    console.log("Connected to PeerJS Server.  My ID is:", id);
-	    resolve();
-	});
+	      peer.on("open", (id) => {
+	          console.log("Connected to PeerJS Server.  My ID is:", id);
+	          resolve();
+	      });
 
         // Connect to the peer with the session ID
-	peer.on("connection", (dataConnection) => {
-	    if (!outboundDataConnection) {
-		peer.connect(dataConnection.peer);
-	    }
-  	  outboundDataConnection = dataConnection;
+	      peer.on("connection", (dataConnection) => {
+	          if (!outboundDataConnection) {
+		            peer.connect(dataConnection.peer);
+	          }
+  	        outboundDataConnection = dataConnection;
             console.log("Peer reached out to me:", dataConnection.peer);
             dataConnection.on("open", function() {
-		console.log("Connection opened");
+		            console.log("Data connection opened");
                 dataConnection.send({message: 'Hello'});
-	    });
-            dataConnection.on("data", function(data) { console.log(`Recieved data: ${JSON.stringify(data)}`) });
-            dataConnection.on("error", (err) => { console.error("Data connection error: ", err); });
-	});
+	          });
+            dataConnection.on("close", function() {
+		            console.log("Data connection closed");
+                dataConnection.send({message: 'Hello'});
+	          });
+            dataConnection.on("data", function(data) {
+                console.log(`Recieved data: ${JSON.stringify(data)}`)
+            });
+            dataConnection.on("error", (err) => {
+                console.error("Data connection error: ", err);
+            });
+	      });
+        peer.on("call", (mediaConnection) => { console.log("Media connection!"); });
+        peer.on("close", () => { console.log("close"); });
+        peer.on("disconnected", () => { console.log("disconnected"); });
 
-	// Handle connection errors
-	peer.on("error", (err) => {
-	    console.error("PeerJS connection error:", err);
-	});
+	      // Handle connection errors
+	      peer.on("error", (err) => {
+	          console.error("PeerJS connection error:", err);
+	      });
     });
 }
 
@@ -337,6 +414,57 @@ async function createSessionLinkAndPeer(sessionId) {
   document.body.appendChild(urlContainer);
 }
 
+
+class CircularAudioBuffer {
+    constructor(context, duration = 180) {
+        this.context = context;
+        this.duration = duration;
+        this.sampleRate = context.sampleRate;
+        this.bufferSize = duration * this.sampleRate * 2; // Stereo
+        this.buffer = new Float32Array(this.bufferSize);
+        this.writeIndex = 0;
+
+        this.customNode = this.context.createScriptProcessor(this.bufferSize, 2, 2);
+        this.customNode.onaudioprocess = this.handleAudioProcess.bind(this);
+    }
+
+    handleAudioProcess(event) {
+        const inputBuffer = event.inputBuffer;
+        const outputBuffer = event.outputBuffer;
+
+        // Copy input to buffer, wrapping around at the end
+        const remaining = this.bufferSize - this.writeIndex;
+        const toCopy = Math.min(remaining, inputBuffer.length);
+        this.buffer.set(inputBuffer.getChannelData(0), this.writeIndex);
+        this.buffer.set(inputBuffer.getChannelData(1), this.writeIndex + this.bufferSize / 2);
+        this.writeIndex = (this.writeIndex + toCopy) % this.bufferSize;
+
+        if (toCopy < inputBuffer.length) {
+            // Wrap around to the beginning
+            const remaining = inputBuffer.length - toCopy;
+            this.buffer.set(inputBuffer.getChannelData(0).slice(toCopy), 0);
+            this.buffer.set(inputBuffer.getChannelData(1).slice(toCopy), this.bufferSize / 2);
+            this.writeIndex = remaining;
+        }
+
+        // Pass audio through to output
+        outputBuffer.getChannelData(0).set(inputBuffer.getChannelData(0));
+        outputBuffer.getChannelData(1).set(inputBuffer.getChannelData(1));
+    }
+
+    start() {
+        this.customNode.connect(this.context.destination);
+    }
+
+    stop() {
+        this.customNode.disconnect();
+    }
+
+    getBuffer() {
+        return this.buffer;
+    }
+}
+
 init = function() {
   // Clear the current document
   document.body.innerHTML = "";
@@ -371,8 +499,6 @@ init = function() {
 
       
     addTrackDivs();
-    // tick = new Tick(new AudioContext());
-    beatEvent();
   });
 }
 
