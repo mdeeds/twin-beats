@@ -58,6 +58,60 @@ async function startRecordingWithWorklet(audioNode) {
 	});
 }
 
+
+class DraggableDiv {
+  constructor(div) {
+    this.div = div;
+      this.initDrag();
+      this.dragging = false;
+  }
+
+  initDrag() {
+    this.div.addEventListener('mousedown', (event) => {
+      this.startX = event.clientX;
+        this.startY = event.clientY;
+        this.dragging = true;
+      this.div.style.position = 'absolute';
+        document.addEventListener('mousemove', this.moveDiv.bind(this));
+        document.addEventListener('mouseup', this.stopDrag.bind(this));
+    });
+  }
+
+    moveDiv(event) {
+        if (!this.dragging) return;
+    const deltaX = event.clientX - this.startX;
+        const deltaY = event.clientY - this.startY;
+        this.startX = event.clientX;
+        this.startY = event.clientY;
+    this.div.style.left = `${this.div.offsetLeft + deltaX}px`;
+    this.div.style.top = `${this.div.offsetTop + deltaY}px`;
+  }
+
+    stopDrag() {
+        this.dragging = false;
+  }
+
+  getRelativeX() {
+    const rect = this.div.getBoundingClientRect();
+    const width = window.innerWidth;
+    return (rect.left + rect.width / 2) / width;
+  }
+
+  getRelativeY() {
+    const rect = this.div.getBoundingClientRect();
+    const height = window.innerHeight;
+    return (rect.top + rect.height / 2) / height;
+  }
+}
+
+function addBubble() {
+    const div = document.createElement('div');
+    div.innerHTML = 'o';
+    div.classList.add('bubble');
+    document.body.appendChild(div);
+    new DraggableDiv(div);
+}
+
 async function init() {
 	document.body.innerHTML = "";
     const source = await getAudioSourceNode();
@@ -70,6 +124,8 @@ async function go() {
     button.innerText = 'GO';
     document.body.appendChild(button);
     button.addEventListener('click', init);
+
+    addBubble();
 }
 
 
