@@ -207,7 +207,8 @@ function writeTone(buffer, freq, startSeconds, durationSeconds, context) {
     const endSeconds = startSeconds + durationSeconds;
     let i = startSeconds * context.sampleRate;
     while (t < endSeconds && i < buffer.length) {
-        const y = Math.sin(t * freq * (2 * Math.PI));
+        let y = Math.sin(t * freq * (2 * Math.PI));
+        y = y * y * y;
         buffer[i] = y;
         ++i;
         t += 1.0 / context.sampleRate;
@@ -261,6 +262,7 @@ class DraggableDiv {
         });
 
         this.filterNode.connect(this.panNode);
+        this.context = context;
     }
 
     connectSource(source) {
@@ -284,12 +286,21 @@ class DraggableDiv {
 
     moveDiv(event) {
         if (!this.dragging) return;
-    const deltaX = event.clientX - this.startX;
+        const deltaX = event.clientX - this.startX;
         const deltaY = event.clientY - this.startY;
         this.startX = event.clientX;
         this.startY = event.clientY;
-    this.div.style.left = `${this.div.offsetLeft + deltaX}px`;
-    this.div.style.top = `${this.div.offsetTop + deltaY}px`;
+        this.div.style.left = `${this.div.offsetLeft + deltaX}px`;
+        this.div.style.top = `${this.div.offsetTop + deltaY}px`;
+        let pan = this.getRelativeX() * 2.0 - 1.0;
+        pan = Math.min(Math.max(pan, -1), 1.0);
+        this.panNode.pan.linearRampToValueAtTime(pan, this.context.currentTime + 1/60);
+        let cutoffNote = (1.0 - this.getRelativeY()) * 120 - 45;
+        let cutoffHz = Math.pow(2.0, cutoffNote / 12) * 440;
+        cutoffHz = Math.min(Math.max(1, cutoffHz), 24000);
+        this.filterNode.frequency.linearRampToValueAtTime(cutoffHz, this.context.currentTime + 1/60);
+        console.log(`Cutoff: ${cutoffHz}`);
+        
   }
 
     stopDrag() {
