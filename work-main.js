@@ -67,11 +67,12 @@ function getCenterFrequencyForBinIndex(binIndex, numBins, audioCtx) {
 }
 
 function getMidiNoteFromFrequency(frequency) {
-  const A4_FREQUENCY = 440; // Reference frequency for A4 (MIDI note 69)
-  // Calculate half steps from A4
-  const halfStepsFromA4 = Math.log2(frequency / A4_FREQUENCY) * 12;
-  // Round to nearest integer (MIDI note number)
+    const A4_FREQUENCY = 440; // Reference frequency for A4 (MIDI note 69)
+    // Calculate half steps from A4
+    const halfStepsFromA4 = Math.log2(frequency / A4_FREQUENCY) * 12;
+    // Round to nearest integer (MIDI note number)
     const midiNoteNumber = halfStepsFromA4 + 69;
+    if (midiNoteNumber < 0) { return 0; }
     return midiNoteNumber;
 }
     
@@ -122,6 +123,7 @@ function getColorForBucket(binIndex, numBins, audioCtx) {
 }
 
 function makeColorMapping(numBins, audioCtx) {
+    console.log(`Number of bins: ${numBins}`);
     const colors = [];
     for (let i = 0; i < numBins; ++i) {
         const color = getColorForBucket(i, numBins, audioCtx);
@@ -136,10 +138,11 @@ function makeColorMapping(numBins, audioCtx) {
 class AnalyzerCanvas {
     constructor(canvas, source) {
         this.canvas = canvas;
-        this.ctx = canvas.getContext('2d');
+        this.ctx = canvas.getContext('2d', { willReadFrequently: true });
         this.source = source;
         this.analyzer = source.context.createAnalyser();
-        this.analyzer.fftSize = 2048;
+        this.analyzer.fftSize = 2048 * 4;
+        this.analyzer.smoothingTimeConstant = 0.1;
         source.connect(this.analyzer);
         this.x = 0;
         this.colorMapping = makeColorMapping(this.analyzer.frequencyBinCount, source.context);
@@ -163,10 +166,22 @@ class AnalyzerCanvas {
 
         let y = height - 1;
         let targetY = y;
+        // let biggestBin = 0;
         // Fill data buffer efficiently based on colors and frequencies
+
+        let sum = 0;
         for (let i = 0; i < this.frequencyData.length; i++) {
+            sum += Math.pow(2, this.frequencyData[i] / 10);
+        }
+        const k = this.canvas.height / (sum + 1);
+
+        
+        for (let i = 0; i < this.frequencyData.length; i++) {
+            //if (this.frequencyData[i] > this.frequencyData[biggestBin]) {
+            //    biggestBin = i;
+            //}
             // frequencyData is in decibels, so exponentiate to get positive values
-            targetY -= Math.pow(2, this.frequencyData[i] / 10) * 5;
+            targetY -= Math.pow(2, this.frequencyData[i] / 10) * k;
             const color = this.colorMapping[i];
             while (y > targetY && y >= 0) {
                 const offset = y * 4;
@@ -177,6 +192,9 @@ class AnalyzerCanvas {
                 --y;
             }
         }
+        //if (this.x % 16 == 0) {
+        //    console.log(`Biggest bin: ${biggestBin}`);
+        //}
         while (y > 0) {
             const offset = y * 4;
             data[offset + 0] = 255;
@@ -190,6 +208,48 @@ class AnalyzerCanvas {
         this.x = (this.x + 1) % this.canvas.width;
         requestAnimationFrame(this.renderFrame.bind(this));
     }
+}
+
+function writeTone(buffer, freq, startSeconds, durationSeconds, context) {
+    let t = startSeconds;
+    const endSeconds = startSeconds + durationSeconds;
+    let i = startSeconds * context.sampleRate;
+    while (t < endSeconds && i < buffer.length) {
+        const y = Math.sin(t * freq * (2 * Math.PI));
+        buffer[i] = y;
+        ++i;
+        t += 1.0 / context.sampleRate;
+    }
+}
+
+function fillMetronomeWithScale(buffer, context) {
+    let freq = 220;
+    for (let i = 0; i < 13; ++i) {
+        console.log(freq);
+        writeTone(buffer, freq, i * 0.5, 0.3, context);
+        freq *= Math.pow(2.0, 1/12);
+    }
+}
+
+function fillMetronome(buffer, context) {
+    for (let i = 0; i < 16; ++i) {
+        writeTone(buffer, 220, i * 0.5, 0.05, context);
+    }
+    for (let i = 0; i < 4; ++i) {
+        writeTone(buffer, 440, i * 2.0, 0.05, context);
+    }
+}
+
+
+function makeMetronome(context) {
+    const buffer = context.createBuffer(1, context.sampleRate * 8, context.sampleRate);
+    const channelData = buffer.getChannelData(0);
+    fillMetronome(channelData, context);
+    const bufferNode = context.createBufferSource({loop: true});
+    bufferNode.buffer = buffer;
+    bufferNode.loop = true;
+    bufferNode.start();
+    return bufferNode;
 }
 
 
@@ -268,18 +328,23 @@ function addBubble(context) {
 async function init() {
 	  document.body.innerHTML = "";
     const source = await getAudioSourceNode();
-	  const recordingNode = await startRecordingWithWorklet(source);
+	  // const recordingNode = await startRecordingWithWorklet(source);
     const bubble = addBubble(source.context);
-    bubble.connectSource(recordingNode);
-	  bubble.connectTarget(source.context.destination);
+    // bubble.connectSource(recordingNode);
+	  // bubble.connectTarget(source.context.destination);
 
 
     const canvas = document.createElement('canvas');
     canvas.width = 600;
     canvas.height = 100;
     document.body.appendChild(canvas);
+
+    const metronome = makeMetronome(source.context);
     // TODO: better if we can get the output node of the recording bubble.
-    new AnalyzerCanvas(canvas, source);
+    new AnalyzerCanvas(canvas, metronome);
+    bubble.connectSource(metronome);
+    bubble.connectTarget(source.context.destination);
+
 }
 
 async function go() {
