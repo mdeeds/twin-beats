@@ -166,7 +166,7 @@ class AnalyzerCanvas {
         // Fill data buffer efficiently based on colors and frequencies
         for (let i = 0; i < this.frequencyData.length; i++) {
             // frequencyData is in decibels, so exponentiate to get positive values
-            targetY -= Math.exp(this.frequencyData[i]) * 500; 
+            targetY -= Math.pow(2, this.frequencyData[i] / 10) * 5;
             const color = this.colorMapping[i];
             while (y > targetY && y >= 0) {
                 const offset = y * 4;
