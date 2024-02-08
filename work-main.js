@@ -195,14 +195,6 @@ class AnalyzerCanvas {
         //if (this.x % 16 == 0) {
         //    console.log(`Biggest bin: ${biggestBin}`);
         //}
-        while (y > 0) {
-            const offset = y * 4;
-            data[offset + 0] = 255;
-            data[offset + 1] = 255;
-            data[offset + 2] = 255;
-            data[offset + 3] = 255;
-            --y;
-        }
         // Put the updated data back onto the canvas
         this.ctx.putImageData(imageData, this.x, 0);
         this.x = (this.x + 1) % this.canvas.width;
