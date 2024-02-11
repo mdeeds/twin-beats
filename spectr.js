@@ -63,12 +63,13 @@ class Vizualizer {
     constructor(source) {
         this.audioCtx = source.context;
         this.analyzerNode = this.audioCtx.createAnalyser();
-        this.analyzerNode.fftSize = 512;
+        this.analyzerNode.fftSize = 4096;
         source.connect(this.analyzerNode);
 
         // Get analyzer settings
         this.fftSize = this.analyzerNode.fftSize;
         this.frequencyBinCount = this.fftSize / 2;
+        this.renderBins = 512;
 
         this.canvas = document.getElementById('canvas');
         // Get canvas context
@@ -92,26 +93,37 @@ class Vizualizer {
         this.analyzerNode.getByteTimeDomainData(this.timeDomainData);
         
         // Calculate bar width and spacing
-        const barWidth = this.canvas.width / this.frequencyBinCount;
+        const barWidth = this.canvas.width / this.renderBins;
         const barSpacing = 2;
+
+        // Find a rising edge
+        let offset = 0;
+        for (let i = 0; i < this.fftSize-1; ++i) {
+            if (this.timeDomainData[i] < 128 && this.timeDomainData[i+1] >= 128) {
+                offset = i;
+                break;
+            }
+        }
         
         // Draw bars for the left channel
-        for (let i = 0; i < this.frequencyBinCount; i++) {
+        for (let i = 0; i < this.renderBins; i++) {
             const barHeight = 0.2 * this.leftChannelData[i] * this.canvas.height / 255;
             this.ctx.fillStyle = 'blue';
             this.ctx.fillRect(
                 i * (barWidth + barSpacing),
-                this.canvas.height / 2 - barHeight + 0.05 * this.timeDomainData[i],
+                this.canvas.height / 2 - barHeight +
+                    0.5 * this.timeDomainData[(i + offset) % this.fftSize],
                 barWidth, barHeight);
         }
-        
+
         // Draw bars for the right channel
-        for (let i = 0; i < this.frequencyBinCount; i++) {
+        for (let i = 0; i < this.renderBins; i++) {
             const barHeight = 0.2 * this.rightChannelData[i] * this.canvas.height / 255;
             this.ctx.fillStyle = 'red';
             this.ctx.fillRect(
                 i * (barWidth + barSpacing),
-                this.canvas.height / 2 + 0.05 * this.timeDomainData[i],
+                this.canvas.height / 2 +
+                    0.5 * this.timeDomainData[(i + offset) % this.fftSize],
                 barWidth, barHeight);
         }
         
@@ -123,9 +135,10 @@ class Vizualizer {
 
 
 async function init() {
-    const source = await getAudioSourceNode();
-    const track = makeMetronome(source.context);
-    track.connect(source.context.destination);
+    const audioElement = document.getElementById('audioSource');
+    const audioCtx = new AudioContext();
+    const track = audioCtx.createMediaElementSource(audioElement);
+    track.connect(audioCtx.destination);
 
     const viz = new Vizualizer(track);
 }
