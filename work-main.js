@@ -119,26 +119,6 @@ class DraggableDiv {
 
         this.filterNode.connect(this.panNode);
         this.context = context;
-
-// Doesn't seem to work. :-(
-//        const observer = new MutationObserver(mutations => {
-//            console.log('A');
-//            for (const mutation of mutations) {
-//                console.log('B');
-//                if (mutation.type === "attributes") {
-//                    console.log('C');
-//                    if (mutation.attributeName === 'left') {
-//                        console.log(`Left`);
-//                        this.updatePan();
-//                    } else if (mutation.attributeName === 'top') {
-//                        this.updateFilter();
-//                    }
-//                }
-//            }
-//        });
-//        observer.observe(div, {
-//            attributes: true,
-//            attributeFilter: ['left', 'top'] });
     }
 
     connectSource(source) {
@@ -158,6 +138,10 @@ class DraggableDiv {
             document.addEventListener('mousemove', this.moveDiv.bind(this));
             document.addEventListener('mouseup', this.stopDrag.bind(this));
         });
+        this.div.moveCallback = () => {
+            this.updatePan();
+            this.updateFilter();
+        }
     }
     
     moveDiv(event) {
@@ -216,19 +200,16 @@ function moveBubbles() {
     const bubbles = document.querySelectorAll('.bubble');
 
     // Function to check collision between two circles
-    checkCollision = function(rect1, rect2) {
+    const checkCollision = function(rect1, rect2) {
         const meanDiameter = (rect1.width + rect1.height + rect2.width + rect2.height) / 4;
         const x1 = rect1.left + rect1.width * 0.5;
         const y1 = rect1.top + rect1.height * 0.5;
         const x2 = rect2.left + rect2.width * 0.5;
         const y2 = rect2.top + rect2.height * 0.5;
-
         const dx = x2 - x1;
         const dy = y2 - y1;
-
         return (dx * dx + dy * dy <= meanDiameter * meanDiameter);
     }
-
 
     for (let i = 0; i < bubbles.length; i++) {
         const bubble1 = bubbles[i];
@@ -252,12 +233,18 @@ function moveBubbles() {
                 bubble2.style.left = `${rect2.left + movementX}px`;
                 bubble1.style.top = `${rect1.top - movementY}px`;
                 bubble2.style.top = `${rect2.top + movementY}px`;
+
+                if (bubble1.moveCallback) {
+                    bubble1.moveCallback();
+                }
+                if (bubble2.moveCallback) {
+                    bubble2.moveCallback();
+                }
             }
         }
     }
     requestAnimationFrame(moveBubbles);
 }
-
 
 async function init() {
 	  document.body.innerHTML = "";
@@ -265,12 +252,7 @@ async function init() {
 	  const recordingNode = await startRecordingWithWorklet(source);
     recordingNode.connect(source.context.destination);
     const bubble = addBubble(source.context);
-
-    for (let i = 0; i < 5; ++i) {
-        addBubble(source.context);
-    }
     moveBubbles();
-
 
     const canvas = document.createElement('canvas');
     canvas.width = 600;
@@ -297,5 +279,3 @@ async function go() {
     button.addEventListener('click', init);
 
 }
-
-
