@@ -13,7 +13,6 @@ button {
     position: 'absolute';
     width: 100px;
     height: 100px;
-    width: 100px;
     border-radius: 50%; /* Ensures a perfect circle */
     background-color: rgba(255, 255, 255, 0.2); /* Light gray background */
     border: 3px solid rgba(255, 255, 255, 0.8);

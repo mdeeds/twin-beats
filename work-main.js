@@ -192,6 +192,8 @@ function addBubble(context) {
     const div = document.createElement('div');
     div.innerHTML = 'o';
     div.classList.add('bubble');
+    div.style.left = '50vw';
+    div.style.top = '5vh';
     document.body.appendChild(div);
     return new DraggableDiv(div, context);
 }
@@ -246,12 +248,31 @@ function moveBubbles() {
     requestAnimationFrame(moveBubbles);
 }
 
-async function init() {
-	  document.body.innerHTML = "";
-    const source = await getAudioSourceNode();
+async function startRecordingInNewBubble(source, startTime) {
 	  const recordingNode = await startRecordingWithWorklet(source);
     recordingNode.connect(source.context.destination);
     const bubble = addBubble(source.context);
+    bubble.connectSource(recordingNode);
+    bubble.connectTarget(source.context.destination);
+}
+
+
+function demonstrateAutocorrelation(context) {
+    const worker = new Worker('auto-correlation-worker.js');
+    const buffer = new Float32Array(context.sampleRate * 8);
+    fillMetronome(buffer, context);
+    
+    worker.onmessage = function(e) { console.log(e.data); };
+    worker.postMessage({sampleRate: 44100});
+    worker.postMessage({buffer: buffer});
+}
+
+
+async function init() {
+	  document.body.innerHTML = "";
+    const source = await getAudioSourceNode();
+    await startRecordingInNewBubble(source, source.context.currentTime + 0.1);
+
     moveBubbles();
 
     const canvas = document.createElement('canvas');
@@ -260,16 +281,11 @@ async function init() {
     document.body.appendChild(canvas);
 
     const metronome = makeMetronome(source.context);
+    const bubble = addBubble(source.context);
     bubble.connectSource(metronome);
     bubble.connectTarget(source.context.destination);
 
-    const worker = new Worker('auto-correlation-worker.js');
-    const buffer = new Float32Array(source.context.sampleRate * 8);
-    fillMetronome(buffer, source.context);
-    
-    worker.onmessage = function(e) { console.log(e.data); };
-    worker.postMessage({sampleRate: 44100});
-    worker.postMessage({buffer: buffer});
+    demonstrateAutocorrelation(source.context);
 }
 
 async function go() {
