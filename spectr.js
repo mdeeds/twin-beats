@@ -132,8 +132,6 @@ class Vizualizer {
     }
 }
 
-
-
 async function init() {
     const audioElement = document.getElementById('audioSource');
     const audioCtx = new AudioContext();
@@ -142,7 +140,6 @@ async function init() {
 
     const viz = new Vizualizer(track);
 }
-
 
 
 function go() {
