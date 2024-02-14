@@ -1,62 +1,77 @@
 class RecorderWorklet extends AudioWorkletProcessor {
-  constructor() {
-    super();
-    this.bufferSize = Math.round(sampleRate * 8); // 8 seconds of buffer
-    this.buffer = new Float32Array(this.bufferSize);
-    this.writeIndex = 0;
-    this.recording = false;
-    this.skipSamples = 0; // New variable to track samples to skip
-  }
-  
+    constructor() {
+        super();
+        this.bufferSize = Math.round(sampleRate * 8); // 8 seconds of buffer
+        this.buffer = new Float32Array(this.bufferSize);
+        this.playIndex = 0;
+        this.readIndex = 0;
+        this.writeIndex = 0;
+        this.lastPlayValue = 0;
+        this.lastRecordValue = 0;
+        this.skipSamples = 0; // New variable to track samples to skip
+        this.stopped = true;
+    }
+    
     static get parameterDescriptors() {
-    return [
-      {
-        name: "startRecording",
-        defaultValue: 0,
-        minValue: 0,
-        maxValue: 1,
-        automationRate: "a-rate",
-      },
-    ];
-  }
+        return [
+            {
+                name: "record",
+                defaultValue: 0,
+                minValue: 0,
+                maxValue: 1,
+                automationRate: "a-rate",
+            },
+            {
+                name: "play",
+                defaultValue: 0,
+                minValue: 0,
+                maxValue: 1,
+                automationRate: "a-rate",
+            },
+        ];
+    }
 
-  copyFromBuffer(offset, buffer, outputChannel) {
-	  let sourceIndex = offset;
-	  for (let i = 0; i < outputChannel.length; ++i) {
-		  outputChannel[i] = buffer[sourceIndex];
-		  sourceIndex = (sourceIndex + 1) % buffer.length;
-	  }
-  }
+    process(inputs, outputs, parameters) {
+        // Hard code the frame size.  It seems like this will never change.
+        // See https://developer.mozilla.org/en-US/docs/Web/API/AudioWorkletGlobalScope/currentFrame
+	      const frameSize = 128;
 
-  addIntoBuffer(offset, buffer, inputChannel) {
-	  let targetIndex = offset;
-	  for (let i = 0; i < inputChannel.length; ++i) {
-		  buffer[targetIndex] += inputChannel[i];
-		  targetIndex = (targetIndex + 1) % buffer.length;
-	  }
-  }
+        const playParam = parameters["play"];
 
+        for (let i = 0; i < frameSize; ++i) {
+            const currentPlayParam = playParam.length == 1 ? playParam[0] : playParam[i];
+            if (this.lastPlayValue <= 0 && currentPlayParam > 0) {
+                // Rising edge, reset the play head.
+                this.readIndex = 0;
+            }
+            this.lastPlayValue = currentPlayParam;
+            if (currentPlayParam > 0) {
+                for (const output of outputs) {
+                    for (const outputChannel of output) {
+                        outputChannel[i] = this.buffer[this.readIndex];
+                    }
+                }
+                this.readIndex = (this.readIndex + 1) % this.buffer.length;
+            }
+        }        
 
-  process(inputs, outputs, parameters) {
-	let frameSize = 128;
-	// For now, the buffer is monophonic.  We copy it to every channel of every output.
-	for(const output of outputs) {
-	  for (const outputChannel of output) {
-    	this.copyFromBuffer(this.writeIndex, this.buffer, outputChannel);
-	  }
-	}
-
-    for (const input of inputs) {
-	  // For now, just use the left channel of the input - we're doing this monophonically.
-	  const inputChannel = input[0];
-	  this.addIntoBuffer(this.writeIndex, this.buffer, inputChannel);
-	  frameSize = inputChannel.length;
-	}
-	
-	this.writeIndex = (this.writeIndex + frameSize) % this.bufferSize;
-
-    return true;
-  }
+        const recordParam = parameters["record"];
+        for (let i = 0; i < frameSize; ++i) {
+            const currentRecordValue = recordParam.length == 1 ? recordParam[0] : recordParam[i];
+            if (currentRecordValue > 0 && this.lastRecordValue <= 0) {
+                this.writeIndex = 0;
+                this.lastRecordValue = 1;
+            }
+            if (currentRecordValue > 0) {
+                for (const input of inputs) {
+                    const inputChannel = input[0]; // TODO: Handle stereo inputs
+                    this.buffer[this.writeIndex] += inputChannel[i];
+                }
+            }
+            this.writeIndex = (this.writeIndex + 1) % this.buffer.length;
+        }
+        return true;
+    }
 }
 
 registerProcessor("recorder-worklet", RecorderWorklet);

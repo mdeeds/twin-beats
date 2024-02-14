@@ -48,8 +48,12 @@ async function startRecordingWithWorklet(audioNode) {
             //workletNode.port.postMessage({ port });
             
             // Set the "startRecording" parameter at the desired time
-            startParameter = workletNode.parameters.get("startRecording");
-	          startParameter.setValueAtTime(1, audioCtx.currentTime + 4.0); // Trigger recording
+            recordParameter = workletNode.parameters.get("record");
+	          recordParameter.setValueAtTime(1, audioCtx.currentTime + 4.0); // Trigger recording
+	          recordParameter.setValueAtTime(0, audioCtx.currentTime + 12.0); // End recording
+
+            playParameter = workletNode.parameters.get("play");
+	          playParameter.setValueAtTime(1, audioCtx.currentTime + 12.0); // Trigger playback
 	          
 	          resolve(workletNode);
         } catch (error) {
@@ -256,7 +260,6 @@ async function startRecordingInNewBubble(source, startTime) {
     bubble.connectTarget(source.context.destination);
 }
 
-
 function demonstrateAutocorrelation(context) {
     const worker = new Worker('auto-correlation-worker.js');
     const buffer = new Float32Array(context.sampleRate * 8);
@@ -267,31 +270,29 @@ function demonstrateAutocorrelation(context) {
     worker.postMessage({buffer: buffer});
 }
 
-
 async function init() {
 	  document.body.innerHTML = "";
     const source = await getAudioSourceNode();
     await startRecordingInNewBubble(source, source.context.currentTime + 0.1);
-
+    
     moveBubbles();
-
+    
     const canvas = document.createElement('canvas');
     canvas.width = 600;
     canvas.height = 100;
     document.body.appendChild(canvas);
-
+    
     const metronome = makeMetronome(source.context);
     const bubble = addBubble(source.context);
     bubble.connectSource(metronome);
     bubble.connectTarget(source.context.destination);
-
+    
     demonstrateAutocorrelation(source.context);
 }
-
+ 
 async function go() {
-    const button = document.createElement('button');
-    button.innerText = 'GO';
-    document.body.appendChild(button);
-    button.addEventListener('click', init);
-
+     const button = document.createElement('button');
+     button.innerText = 'GO';
+     document.body.appendChild(button);
+     button.addEventListener('click', init);
 }
