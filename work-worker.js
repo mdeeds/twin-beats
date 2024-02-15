@@ -42,6 +42,7 @@ class RecorderWorklet extends AudioWorkletProcessor {
             const currentPlayParam = playParam.length == 1 ? playParam[0] : playParam[i];
             if (this.lastPlayValue <= 0 && currentPlayParam > 0) {
                 // Rising edge, reset the play head.
+                console.log('Start playing');
                 this.readIndex = 0;
             }
             this.lastPlayValue = currentPlayParam;
@@ -59,6 +60,7 @@ class RecorderWorklet extends AudioWorkletProcessor {
         for (let i = 0; i < frameSize; ++i) {
             const currentRecordValue = recordParam.length == 1 ? recordParam[0] : recordParam[i];
             if (currentRecordValue > 0 && this.lastRecordValue <= 0) {
+                console.log(`Start recording`);
                 this.writeIndex = 0;
                 this.lastRecordValue = 1;
             }

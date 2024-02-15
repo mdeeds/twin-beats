@@ -12,6 +12,7 @@ async function getAudioSourceNode() {
             },
         },
     });
+    console.log(`Strem: ${stream.id}`);
     const source = audioCtx.createMediaStreamSource(stream);
     return source;
 }
@@ -35,7 +36,7 @@ function getBPMFromURL() {
 	  return getNumberFromURL('bpm', 120.0);
 }
 
-async function startRecordingWithWorklet(audioNode) {
+async function startRecordingWithWorklet(audioNode, startTime) {
 	  return new Promise(async (resolve, reject) => {
         try {
             const audioCtx = audioNode.context;
@@ -49,11 +50,11 @@ async function startRecordingWithWorklet(audioNode) {
             
             // Set the "startRecording" parameter at the desired time
             recordParameter = workletNode.parameters.get("record");
-	          recordParameter.setValueAtTime(1, audioCtx.currentTime + 4.0); // Trigger recording
-	          recordParameter.setValueAtTime(0, audioCtx.currentTime + 12.0); // End recording
+	          recordParameter.setValueAtTime(1, startTime); // Trigger recording
+	          recordParameter.setValueAtTime(0, startTime + 8.0); // End recording
 
             playParameter = workletNode.parameters.get("play");
-	          playParameter.setValueAtTime(1, audioCtx.currentTime + 12.0); // Trigger playback
+	          playParameter.setValueAtTime(1, startTime + 8.0); // Trigger playback
 	          
 	          resolve(workletNode);
         } catch (error) {
@@ -104,8 +105,6 @@ function makeMetronome(context) {
     bufferNode.start();
     return bufferNode;
 }
-
-
 
 class DraggableDiv {
     constructor(div, context) {
@@ -192,9 +191,9 @@ class DraggableDiv {
     }
 }
 
-function addBubble(context) {
+function addBubble(context, message) {
     const div = document.createElement('div');
-    div.innerHTML = 'o';
+    div.innerHTML = message;
     div.classList.add('bubble');
     div.style.left = '50vw';
     div.style.top = '5vh';
@@ -253,9 +252,8 @@ function moveBubbles() {
 }
 
 async function startRecordingInNewBubble(source, startTime) {
-	  const recordingNode = await startRecordingWithWorklet(source);
-    recordingNode.connect(source.context.destination);
-    const bubble = addBubble(source.context);
+	  const recordingNode = await startRecordingWithWorklet(source, startTime);
+    const bubble = addBubble(source.context, "mic");
     bubble.connectSource(recordingNode);
     bubble.connectTarget(source.context.destination);
 }
@@ -270,6 +268,29 @@ function demonstrateAutocorrelation(context) {
     worker.postMessage({buffer: buffer});
 }
 
+function loadBackground(canvas) {
+    const img = new Image();
+    img.src = 'background.jpg';
+    
+    // Function to draw the image on the canvas
+    function drawImage() {
+        // Get the canvas context
+        const ctx = canvas.getContext('2d');
+        
+        // Calculate scaling factors to fit the image proportionally
+        const widthRatio = canvas.width / img.width;
+        const heightRatio = canvas.height / img.height;
+        const scale = Math.min(widthRatio, heightRatio);
+        
+        // Draw the image stretched to fit the canvas
+        ctx.drawImage(img, 0, 0, img.width, img.height,
+                      0, 0, canvas.width, canvas.height);
+    }
+
+    // Call the draw function when the image is loaded
+    img.onload = drawImage;
+}
+
 async function init() {
 	  document.body.innerHTML = "";
     const source = await getAudioSourceNode();
@@ -278,16 +299,17 @@ async function init() {
     moveBubbles();
     
     const canvas = document.createElement('canvas');
-    canvas.width = 600;
-    canvas.height = 100;
+    canvas.width = 720 * 16 / 9;
+    canvas.height = 720;
     document.body.appendChild(canvas);
+    loadBackground(canvas);
     
     const metronome = makeMetronome(source.context);
-    const bubble = addBubble(source.context);
+    const bubble = addBubble(source.context, "metronome");
     bubble.connectSource(metronome);
     bubble.connectTarget(source.context.destination);
     
-    demonstrateAutocorrelation(source.context);
+    // demonstrateAutocorrelation(source.context);
 }
  
 async function go() {
