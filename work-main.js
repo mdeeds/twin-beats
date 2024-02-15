@@ -277,14 +277,12 @@ function loadBackground(canvas) {
         // Get the canvas context
         const ctx = canvas.getContext('2d');
         
-        // Calculate scaling factors to fit the image proportionally
-        const widthRatio = canvas.width / img.width;
-        const heightRatio = canvas.height / img.height;
-        const scale = Math.min(widthRatio, heightRatio);
-        
+        const actualHeight = Math.round(img.height * canvas.height / canvas.width);
         // Draw the image stretched to fit the canvas
-        ctx.drawImage(img, 0, 0, img.width, img.height,
+        ctx.drawImage(img, 0, 0, img.width, actualHeight,
                       0, 0, canvas.width, canvas.height);
+
+        requestAnimationFrame(drawImage);
     }
 
     // Call the draw function when the image is loaded
