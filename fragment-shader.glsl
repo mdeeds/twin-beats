@@ -16,8 +16,25 @@ vec3 sphere(in vec2 look, in vec2 pos, in float radius) {
   }
 }
 
+
+vec3 hsv2rgb(vec3 c)
+{
+    vec4 K = vec4(1.0, 2.0 / 3.0, 1.0 / 3.0, 3.0);
+    vec3 p = abs(fract(c.xxx + K.xyz) * 6.0 - K.www);
+    return c.z * mix(K.xxx, clamp(p - K.xxx, 0.0, 1.0), c.y);
+}
+
 vec4 bg(in vec2 canvasPos) {
-  return vec4(canvasPos.xy, 1.0, 1.0);
+  vec2 origin = vec2(0.5, -0.5);
+  float len = length(canvasPos - origin);
+
+  float bottom = 1.0;
+  float top = 1.3;
+  float height = top - bottom;
+  
+  if (len < bottom || len > top) return vec4(1.0, 1.0, 1.0, 1.0);
+  
+  return vec4(hsv2rgb(vec3(-2.0 * (len - bottom) / height, 0.5, 1.0)), 1.0);
 }
 
 void main() {

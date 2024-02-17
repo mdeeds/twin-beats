@@ -82,8 +82,12 @@
         gl.uniform1f(widthLocation, canvas.width);
         gl.uniform1f(heightLocation, canvas.height);
 
-        gl.clear(gl.COLOR_BUFFER_BIT);
-        gl.drawArrays(gl.TRIANGLE_FAN, 0, 4);
+        renderLoop = () => {
+            gl.clear(gl.COLOR_BUFFER_BIT);
+            gl.drawArrays(gl.TRIANGLE_FAN, 0, 4);
+            requestAnimationFrame(renderLoop);
+        }
+        renderLoop();
     }
   </script>
 </head>
