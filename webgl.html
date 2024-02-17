@@ -28,7 +28,8 @@
         }
 
         // Fragment Shader
-        const fragmentShaderSource = await getBody('fragment-shader.glsl');
+        const fragmentShaderSource = (
+            await getBody('util.glsl') + await getBody('fragment-shader.glsl'));
         // Create and compile the fragment shader
         const fragmentShader = gl.createShader(gl.FRAGMENT_SHADER);
         gl.shaderSource(fragmentShader, fragmentShaderSource);
