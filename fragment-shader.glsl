@@ -4,7 +4,9 @@ varying vec2 v_position;
 
 uniform float u_canvasWidth;
 uniform float u_canvasHeight;
+uniform vec4 u_bubbleLocations[64];
 
+  
 vec4 bg(in vec2 canvasPos) {
   vec2 origin = vec2(0.5, -1.0);
   vec2 relPos = (canvasPos - origin);
@@ -30,7 +32,10 @@ void main() {
   
   vec4 background = bg(canvasPos); // vec4(1.0, 1.0, 1.0, 1.0);
   
-  vec3 foreground = sphere(gl_FragCoord.xy, vec2(300.0, 300.0), 50.0);
+  vec3 foreground = vec3(0.0);
+
+  foreground += sphere(gl_FragCoord.xy, u_bubbleLocations[0].xy, u_bubbleLocations[0].z);
+  foreground += sphere(gl_FragCoord.xy, u_bubbleLocations[1].xy, u_bubbleLocations[1].z);
 
   gl_FragColor = background - vec4(foreground, 0.0);
 }

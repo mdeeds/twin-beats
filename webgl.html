@@ -83,7 +83,14 @@
         gl.uniform1f(widthLocation, canvas.width);
         gl.uniform1f(heightLocation, canvas.height);
 
+        const bubbleLocations = gl.getUniformLocation(program, 'u_bubbleLocations');
+        const flatBubbleLocations = [
+            300, 300, 50, 0,
+            500, 300, 40, 0];
+
         renderLoop = () => {
+            flatBubbleLocations[0] += 0.5;
+            gl.uniform4fv(bubbleLocations, flatBubbleLocations);
             gl.clear(gl.COLOR_BUFFER_BIT);
             gl.drawArrays(gl.TRIANGLE_FAN, 0, 4);
             requestAnimationFrame(renderLoop);
