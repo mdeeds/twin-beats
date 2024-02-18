@@ -73,6 +73,23 @@ setUpGeometry = async function(gl, program) {
     gl.uniform1f(heightLocation, gl.canvas.height);
 }
 
+class Circles {
+    constructor() {
+        this.flatData = [];
+        this.numCircles = 0;
+    }
+
+    add(x, y, r) {
+        this.flatData.push(x, y, r, 0);
+        return ++this.numCircles;
+    }
+
+    move(i, dx, dy) {
+        this.flatData[i * 4] += dx;
+        this.flatData[i * 4 + 1] += dy;
+    }
+}
+
 
 go = async function() {
     const canvas = document.getElementById('myCanvas');
@@ -83,13 +100,14 @@ go = async function() {
     await setUpGeometry(gl, program);
     
     const bubbleLocations = gl.getUniformLocation(program, 'u_bubbleLocations');
-    const flatBubbleLocations = [
-        300, 300, 50, 0,
-        500, 300, 40, 0];
+    const circles = new Circles();
+    circles.add(300, 300, 50);
+    circles.add(500, 300, 40);
 
     renderLoop = () => {
-        flatBubbleLocations[0] += 0.5;
-        gl.uniform4fv(bubbleLocations, flatBubbleLocations);
+        circles.move(0, 0.5, 0);
+        circles.move(1, -0.1, 0.1);
+        gl.uniform4fv(bubbleLocations, circles.flatData);
         gl.clear(gl.COLOR_BUFFER_BIT);
         gl.drawArrays(gl.TRIANGLE_FAN, 0, 4);
         requestAnimationFrame(renderLoop);
