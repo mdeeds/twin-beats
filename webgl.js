@@ -88,6 +88,30 @@ class Circles {
         this.flatData[i * 4] += dx;
         this.flatData[i * 4 + 1] += dy;
     }
+
+    // Returns true if x,y intersects circle i.
+    _checkCollision(i, x, y) {
+        const dx = x - this.flatData[i * 4];
+        const dy = y - this.flatData[i * 4 + 1];
+        const r = this.flatData[i * 4 + 2];
+        return (r * r) > (dx * dx + dy * dy);
+    }
+    
+    handleMouse(event) {
+        if (event.type == 'mousedown') {
+            console.log('down');
+            const rect = event.target.getBoundingClientRect();
+            const x = event.clientX - rect.left;
+            const y = rect.bottom - event.clientY;
+            for (let i = 0; i < this.numCircles; ++i) {
+                if (this._checkCollision(i, x, y)) {
+                    console.log(`Clicked on ${i}`);
+                }
+            }
+        } else if (event.type == 'mouseup') {
+            console.log('up');
+        }
+    }
 }
 
 
@@ -103,6 +127,9 @@ go = async function() {
     const circles = new Circles();
     circles.add(300, 300, 50);
     circles.add(500, 300, 40);
+    canvas.addEventListener('mousedown', (event) => circles.handleMouse(event));
+    canvas.addEventListener('mousemove', (event) => circles.handleMouse(event));
+    canvas.addEventListener('mouseup', (event) => circles.handleMouse(event));
 
     renderLoop = () => {
         circles.move(0, 0.5, 0);
