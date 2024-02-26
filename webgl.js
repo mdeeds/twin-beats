@@ -3,6 +3,7 @@ getBody = async function(url) {
     return await response.text();
 }
 
+
 loadAndCompilePrograms = async function(gl) {
     // Vertex Shader
     const vertexShaderSource = await getBody('vertex-shader.glsl');
@@ -65,12 +66,27 @@ setUpGeometry = async function(gl, program) {
     gl.viewport(0, 0, gl.canvas.width, gl.canvas.height);
     gl.clearColor(0.0, 0.0, 0.0, 1.0);
 
-    // Use the program and draw the quad
+    // Use the program and set up data connections;
     gl.useProgram(program);
     const widthLocation = gl.getUniformLocation(program, 'u_canvasWidth');
     const heightLocation = gl.getUniformLocation(program, 'u_canvasHeight');
     gl.uniform1f(widthLocation, gl.canvas.width);
     gl.uniform1f(heightLocation, gl.canvas.height);
+}
+
+setUpTexture = async function(gl, program) {
+    // Create a texture for storing data
+    const texture = gl.createTexture();
+    gl.bindTexture(gl.TEXTURE_2D, texture);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+    const textureWidth = 1024; // Size of the FFT frequency data
+    const textureHeight = 16;  // Maximum number of tracks
+    // Monochrome texture
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.LUMINANCE, textureWidth, textureHeight, 0, gl.LUMINANCE, gl.UNSIGNED_BYTE, null);
+    const uniformLocation = gl.getUniformLocation(program, "spectrogramTexture");
+    gl.uniform1i(uniformLocation, 0); // Assuming texture unit 0
+
+    return texture;
 }
 
 class Circles {
@@ -122,6 +138,7 @@ go = async function() {
     if (!program) return;
 
     await setUpGeometry(gl, program);
+    const texture = await setUpTexture(gl, program);
     
     const bubbleLocations = gl.getUniformLocation(program, 'u_bubbleLocations');
     const circles = new Circles();
@@ -131,12 +148,24 @@ go = async function() {
     canvas.addEventListener('mousemove', (event) => circles.handleMouse(event));
     canvas.addEventListener('mouseup', (event) => circles.handleMouse(event));
 
+    const spectrogramData = new Uint8Array(16 * 1024);
+
     renderLoop = () => {
         circles.move(0, 0.5, 0);
         circles.move(1, -0.1, 0.1);
         gl.uniform4fv(bubbleLocations, circles.flatData);
-        gl.clear(gl.COLOR_BUFFER_BIT);
+
+        // WebGL needs data in floating point even if it will be bytes in the shader.
+        for (let i = 0; i < spectrogramData.length; ++i) {
+            spectrogramData[i] = Math.floor(256 * Math.random());
+        }
+        // Update texture data
+        gl.bindTexture(gl.TEXTURE_2D, texture);
+        gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, 1024, 16, gl.LUMINANCE, gl.UNSIGNED_BYTE, spectrogramData);
+
+        // gl.clear(gl.COLOR_BUFFER_BIT);
         gl.drawArrays(gl.TRIANGLE_FAN, 0, 4);
+        
         requestAnimationFrame(renderLoop);
     }
     renderLoop();

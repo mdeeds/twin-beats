@@ -48,7 +48,8 @@ float GetPxFromNote(in float note, in float pixelSpan) {
 
 vec4 bg(in vec2 posPanNote) {
   float c = 0.9 + 0.05 * sin(posPanNote.y / 12.0 * 3.1415 * 2.0);
-  return vec4(c, c, c, 1.0);
+  float t = texture2D(spectrogramTexture, (mod(gl_FragCoord.xy, 16.0) / 16.0)).r;
+  return vec4(c, t + c, c, 1.0);
 }
 
 void main() {
