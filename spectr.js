@@ -1,26 +1,9 @@
-function loadBackground(canvas) {
-    const img = new Image();
-    img.src = 'Monet_w1709.jpg';
-    
-    // Function to draw the image on the canvas
-    function drawImage() {
-        // Get the canvas context
-        const ctx = canvas.getContext('2d');
-        
-//        const actualHeight = Math.round(img.width * canvas.height / canvas.width);
-//        ctx.drawImage(img, 0, 0, img.width, actualHeight,
-//                      0, 0, canvas.width, canvas.height);
-//
-        
-        const actualWidth = Math.round(img.height * canvas.width / canvas.height);
-        ctx.drawImage(img, 0, 0, actualWidth, img.height,
-                      0, 0, canvas.width, canvas.height);
-
-        requestAnimationFrame(drawImage);
-    }
-
-    // Call the draw function when the image is loaded
-    img.onload = drawImage;
+async function loadBackground() {
+    return new Promise((resolve, reject) => {        
+        const img = new Image();
+        img.src = 'Monet_w1709.jpg';
+        img.onload = () => { resolve(img); }
+    });
 }
 
 async function getAudioSourceNode() {
@@ -85,7 +68,8 @@ function makeMetronome(context) {
 
 
 class Vizualizer {
-    constructor(source) {
+    constructor(source, backgroundImage) {
+        this.img = backgroundImage;
         this.audioCtx = source.context;
         this.leftAnalyzerNode = this.audioCtx.createAnalyser();
         this.leftAnalyzerNode.fftSize = 4096;
@@ -126,9 +110,17 @@ class Vizualizer {
         this.drawBarChart();
     }
     // Function to draw the bar chart
+
+    drawImage() {
+        const actualWidth = Math.round(
+            this.img.height * canvas.width / canvas.height);
+        this.ctx.drawImage(this.img, 0, 0, actualWidth, this.img.height,
+                      0, 0, canvas.width, canvas.height);
+    }
+    
     drawBarChart() {
         // Clear the canvas
-        // this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
+        this.drawImage();
         
         // Get frequency data for both channels
         this.leftAnalyzerNode.getByteFrequencyData(this.leftChannelData);
@@ -205,20 +197,20 @@ async function getAudioSourceNode() {
 
 async function init(isLive) {
     const audioCtx = new AudioContext();
+    const img = await loadBackground();
     if (isLive) {
-        const viz = new Vizualizer(await getAudioSourceNode());
+        const viz = new Vizualizer(await getAudioSourceNode(), img);
         viz.connectDestination(audioCtx.desination);
     } else {
         const audioElement = document.getElementById('audioSource');
         const track = audioCtx.createMediaElementSource(audioElement);
         track.connect();
-        const viz = new Vizualizer(track);
+        const viz = new Vizualizer(track, img);
     }
 }
 
 
 function go() {
-    loadBackground(document.getElementById('canvas'));
     {
         const button = document.createElement('button');
         button.innerText = 'GO';
