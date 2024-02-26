@@ -76,10 +76,6 @@ class Vizualizer {
         this.rightAnalyzerNode = this.audioCtx.createAnalyser();
         this.rightAnalyzerNode.fftSize = 4096;
 
-
-        const channelMerger = this.audioCtx.createChannelMerger(1);
-        source.connect(channelMerger);
-
         const lowFilter = this.audioCtx.createBiquadFilter();
         lowFilter.type = "lowpass";
         lowFilter.frequency.setValueAtTime(256, this.audioCtx.currentTime);
@@ -87,8 +83,8 @@ class Vizualizer {
         highFilter.type = "highpass";
         highFilter.frequency.setValueAtTime(256, this.audioCtx.currentTime);
 
-        channelMerger.connect(lowFilter);
-        channelMerger.connect(highFilter);
+        source.connect(lowFilter);
+        source.connect(highFilter);
 
         lowFilter.connect(this.leftAnalyzerNode);
         highFilter.connect(this.rightAnalyzerNode);
@@ -167,9 +163,9 @@ class Vizualizer {
     }
     
     connectDestination() {
-        const merger = this.audioCtx.createChannelMerger();
-        this.leftAnalyzerNode.connect(merger);
-        this.rightAnalyzerNode.connect(merger);
+        const merger = this.audioCtx.createChannelMerger(2);
+        this.leftAnalyzerNode.connect(merger,0,0);
+        this.rightAnalyzerNode.connect(merger,0,1);
         merger.connect(this.audioCtx.destination);
     }
     
