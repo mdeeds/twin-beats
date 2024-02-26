@@ -1,3 +1,28 @@
+function loadBackground(canvas) {
+    const img = new Image();
+    img.src = 'Monet_w1709.jpg';
+    
+    // Function to draw the image on the canvas
+    function drawImage() {
+        // Get the canvas context
+        const ctx = canvas.getContext('2d');
+        
+//        const actualHeight = Math.round(img.width * canvas.height / canvas.width);
+//        ctx.drawImage(img, 0, 0, img.width, actualHeight,
+//                      0, 0, canvas.width, canvas.height);
+//
+        
+        const actualWidth = Math.round(img.height * canvas.width / canvas.height);
+        ctx.drawImage(img, 0, 0, actualWidth, img.height,
+                      0, 0, canvas.width, canvas.height);
+
+        requestAnimationFrame(drawImage);
+    }
+
+    // Call the draw function when the image is loaded
+    img.onload = drawImage;
+}
+
 async function getAudioSourceNode() {
     const audioCtx = new AudioContext();
     // Request access to the default audio input and create the source node
@@ -62,12 +87,30 @@ function makeMetronome(context) {
 class Vizualizer {
     constructor(source) {
         this.audioCtx = source.context;
-        this.analyzerNode = this.audioCtx.createAnalyser();
-        this.analyzerNode.fftSize = 4096;
-        source.connect(this.analyzerNode);
+        this.leftAnalyzerNode = this.audioCtx.createAnalyser();
+        this.leftAnalyzerNode.fftSize = 4096;
+        this.rightAnalyzerNode = this.audioCtx.createAnalyser();
+        this.rightAnalyzerNode.fftSize = 4096;
 
+
+        const channelMerger = this.audioCtx.createChannelMerger(1);
+        source.connect(channelMerger);
+
+        const lowFilter = this.audioCtx.createBiquadFilter();
+        lowFilter.type = "lowpass";
+        lowFilter.frequency.setValueAtTime(256, this.audioCtx.currentTime);
+        const highFilter = this.audioCtx.createBiquadFilter();
+        highFilter.type = "highpass";
+        highFilter.frequency.setValueAtTime(256, this.audioCtx.currentTime);
+
+        channelMerger.connect(lowFilter);
+        channelMerger.connect(highFilter);
+
+        lowFilter.connect(this.leftAnalyzerNode);
+        highFilter.connect(this.rightAnalyzerNode);
+        
         // Get analyzer settings
-        this.fftSize = this.analyzerNode.fftSize;
+        this.fftSize = this.leftAnalyzerNode.fftSize;
         this.frequencyBinCount = this.fftSize / 2;
         this.renderBins = 512;
 
@@ -85,16 +128,16 @@ class Vizualizer {
     // Function to draw the bar chart
     drawBarChart() {
         // Clear the canvas
-        this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
+        // this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
         
         // Get frequency data for both channels
-        this.analyzerNode.getByteFrequencyData(this.leftChannelData);
-        this.analyzerNode.getByteFrequencyData(this.rightChannelData);
-        this.analyzerNode.getByteTimeDomainData(this.timeDomainData);
+        this.leftAnalyzerNode.getByteFrequencyData(this.leftChannelData);
+        this.rightAnalyzerNode.getByteFrequencyData(this.rightChannelData);
+        this.leftAnalyzerNode.getByteTimeDomainData(this.timeDomainData);
         
         // Calculate bar width and spacing
         const barWidth = this.canvas.width / this.renderBins;
-        const barSpacing = 2;
+        const barSpacing = 0.5;
 
         // Find a rising edge
         let offset = 0;
@@ -108,46 +151,92 @@ class Vizualizer {
         // Draw bars for the left channel
         for (let i = 0; i < this.renderBins; i++) {
             const barHeight = 0.2 * this.leftChannelData[i] * this.canvas.height / 255;
-            this.ctx.fillStyle = 'blue';
+            this.ctx.fillStyle = '#515511';
             this.ctx.fillRect(
                 i * (barWidth + barSpacing),
                 this.canvas.height / 2 - barHeight +
-                    0.5 * this.timeDomainData[(i + offset) % this.fftSize],
+                    0.25 * this.timeDomainData[(i + offset) % this.fftSize],
                 barWidth, barHeight);
         }
 
         // Draw bars for the right channel
         for (let i = 0; i < this.renderBins; i++) {
             const barHeight = 0.2 * this.rightChannelData[i] * this.canvas.height / 255;
-            this.ctx.fillStyle = 'red';
+            this.ctx.fillStyle = '#6655dd';
             this.ctx.fillRect(
                 i * (barWidth + barSpacing),
                 this.canvas.height / 2 +
-                    0.5 * this.timeDomainData[(i + offset) % this.fftSize],
+                    0.25 * this.timeDomainData[(i + offset) % this.fftSize],
                 barWidth, barHeight);
         }
         
         // Schedule the next draw
         requestAnimationFrame(this.drawBarChart.bind(this));
     }
+    
+    connectDestination() {
+        const merger = this.audioCtx.createChannelMerger();
+        this.leftAnalyzerNode.connect(merger);
+        this.rightAnalyzerNode.connect(merger);
+        merger.connect(this.audioCtx.destination);
+    }
+    
 }
 
-async function init() {
-    const audioElement = document.getElementById('audioSource');
+async function getAudioSourceNode() {
     const audioCtx = new AudioContext();
-    const track = audioCtx.createMediaElementSource(audioElement);
-    track.connect(audioCtx.destination);
+    // Request access to the default audio input and create the source node
+    const stream = await navigator.mediaDevices.getUserMedia({
+        audio: {
+            // Other desired audio constraints
+            mandatory: {
+                // Disable specific processing features
+                echoCancellation: false,
+                noiseSuppression: false,
+                autoGainControl: false, // Not guaranteed to work in all browsers
+            },
+        },
+    });
+    console.log(`Strem: ${stream.id}`);
+    const source = audioCtx.createMediaStreamSource(stream);
+    return source;
+}
 
-    const viz = new Vizualizer(track);
+
+async function init(isLive) {
+    const audioCtx = new AudioContext();
+    if (isLive) {
+        const viz = new Vizualizer(await getAudioSourceNode());
+        viz.connectDestination(audioCtx.desination);
+    } else {
+        const audioElement = document.getElementById('audioSource');
+        const track = audioCtx.createMediaElementSource(audioElement);
+        track.connect();
+        const viz = new Vizualizer(track);
+    }
 }
 
 
 function go() {
-    const button = document.createElement('button');
-    button.innerText = 'GO';
-    button.addEventListener('click', (e) => {
-        document.body.removeChild(button);
-        init();
-    } );
-    document.body.appendChild(button);
+    loadBackground(document.getElementById('canvas'));
+    {
+        const button = document.createElement('button');
+        button.innerText = 'GO';
+        button.addEventListener('click', (e) => {
+            document.body.removeChild(button);
+            init(false);
+        } );
+        document.body.appendChild(button);
+    }
+    {
+        const button = document.createElement('button');
+        button.innerText = 'LIVE';
+        button.addEventListener('click', (e) => {
+            document.body.removeChild(button);
+            init(true);
+        } );
+        document.body.appendChild(button);
+    }
+    
+    
 }
