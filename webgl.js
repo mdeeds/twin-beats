@@ -161,7 +161,10 @@ go = async function() {
         }
         // Update texture data
         gl.bindTexture(gl.TEXTURE_2D, texture);
-        gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, 1024, 16, gl.LUMINANCE, gl.UNSIGNED_BYTE, spectrogramData);
+
+        // gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, 1024, 16, gl.LUMINANCE, gl.UNSIGNED_BYTE, spectrogramData);
+        gl.texImage2D(gl.TEXTURE_2D, 0, gl.LUMINANCE, 1024, 16, 0,
+                      gl.LUMINANCE, gl.UNSIGNED_BYTE, spectrogramData);
 
         // gl.clear(gl.COLOR_BUFFER_BIT);
         gl.drawArrays(gl.TRIANGLE_FAN, 0, 4);
