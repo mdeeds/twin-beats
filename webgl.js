@@ -85,7 +85,8 @@ setUpTexture = async function(gl, program) {
     const textureWidth = 1024; // Size of the FFT frequency data
     const textureHeight = 16;  // Maximum number of tracks
     // Monochrome texture
-    gl.texImage2D(gl.TEXTURE_2D, 0, gl.LUMINANCE, textureWidth, textureHeight, 0, gl.LUMINANCE, gl.UNSIGNED_BYTE, null);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.LUMINANCE, textureWidth, textureHeight,
+                  0, gl.LUMINANCE, gl.UNSIGNED_BYTE, null);
     const uniformLocation = gl.getUniformLocation(program, "spectrogramTexture");
     gl.uniform1i(uniformLocation, 0); // Assuming texture unit 0
 
@@ -133,8 +134,7 @@ class Circles {
     }
 }
 
-
-go = async function() {
+runRenderLoop = async function(analyser) {
     const canvas = document.getElementById('myCanvas');
     const gl = canvas.getContext('webgl');    
     const program = await loadAndCompilePrograms(gl);
@@ -158,10 +158,7 @@ go = async function() {
         circles.move(1, -0.1, 0.1);
         gl.uniform4fv(bubbleLocations, circles.flatData);
 
-        // WebGL needs data in floating point even if it will be bytes in the shader.
-        for (let i = 0; i < spectrogramData.length; ++i) {
-            spectrogramData[i] = Math.floor((i + Math.random() * 4) + (i & 1) * 32) % 256;
-        }
+        analyser.getByteFrequencyData(spectrogramData);
         // Update texture data
         gl.bindTexture(gl.TEXTURE_2D, texture);
 
@@ -175,4 +172,65 @@ go = async function() {
         requestAnimationFrame(renderLoop);
     }
     renderLoop();
+}
+
+async function getAudioSourceNode() {
+    const audioCtx = new AudioContext();
+    // Request access to the default audio input and create the source node
+    const stream = await navigator.mediaDevices.getUserMedia({
+        audio: {
+            // Other desired audio constraints
+            mandatory: {
+                // Disable specific processing features
+                echoCancellation: false,
+                noiseSuppression: false,
+                autoGainControl: false, // Not guaranteed to work in all browsers
+            },
+        },
+    });
+    console.log(`Strem: ${stream.id}`);
+    const source = audioCtx.createMediaStreamSource(stream);
+    return source;
+}
+
+async function getAudioChirpNode() {
+    const audioCtx = new AudioContext();
+
+    const osc = audioCtx.createOscillator();
+    osc.type = 'sawtooth';
+    const gain = audioCtx.createGain();
+    gain.gain.setValueAtTime(300, audioCtx.currentTime);
+    const lfo = audioCtx.createOscillator();
+    lfo.frequency.setValueAtTime(0.5, audioCtx.currentTime);
+    lfo.connect(gain);
+    gain.connect(osc.detune);
+
+    osc.start(audioCtx.currentTime);
+    lfo.start(audioCtx.currentTime);
+    return osc;
+}
+    
+
+
+async function getAnalyser() {
+    const source = await getAudioChirpNode();
+    const analyser = source.context.createAnalyser();
+    source.connect(analyser);
+    return analyser;
+}
+
+init = async function() {
+    const analyser = await getAnalyser();
+    await runRenderLoop(analyser);
+}
+
+
+go = async function() {
+    const button = document.createElement('button');
+    button.innerText = 'GO';
+    document.body.appendChild(button);
+    button.addEventListener('click', () => {
+        document.body.removeChild(button);
+        init();
+    });
 }
