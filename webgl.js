@@ -79,6 +79,9 @@ setUpTexture = async function(gl, program) {
     const texture = gl.createTexture();
     gl.bindTexture(gl.TEXTURE_2D, texture);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
     const textureWidth = 1024; // Size of the FFT frequency data
     const textureHeight = 16;  // Maximum number of tracks
     // Monochrome texture
@@ -157,7 +160,7 @@ go = async function() {
 
         // WebGL needs data in floating point even if it will be bytes in the shader.
         for (let i = 0; i < spectrogramData.length; ++i) {
-            spectrogramData[i] = Math.floor(256 * Math.random());
+            spectrogramData[i] = Math.floor((i + Math.random() * 4) + (i & 1) * 32) % 256;
         }
         // Update texture data
         gl.bindTexture(gl.TEXTURE_2D, texture);

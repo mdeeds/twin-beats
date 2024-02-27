@@ -45,23 +45,31 @@ float GetPxFromNote(in float note, in float pixelSpan) {
   return (note - BOTTOM_NOTE) / (TOP_NOTE - BOTTOM_NOTE) * pixelSpan;
 }
 
-
 vec4 bg(in vec2 posPanNote) {
   float c = 0.9 + 0.05 * sin(posPanNote.y / 12.0 * 3.1415 * 2.0);
-  float t = texture2D(spectrogramTexture, (mod(gl_FragCoord.xy, 16.0) / 16.0)).r;
-  return vec4(c, t, c, 1.0);
+  return vec4(c, c, c, 1.0);
+}
+
+vec3 fg(in float note) {
+  float bin = GetBinFromHz(GetHzFromNote(note)) / BIN_COUNT;
+  // float bin = gl_FragCoord.y / u_canvasHeight;
+  float t = texture2D(spectrogramTexture, vec2(bin, 0)).r;
+  return vec3(t, t, t);
 }
 
 void main() {
   vec2 posXY = gl_FragCoord.xy;
 
   vec2 originXY = vec2(u_canvasWidth * 0.5, -u_canvasHeight * 0.5);
+
+  float note = GetNoteFromPx(length(posXY - originXY) - 0.5 * u_canvasHeight, u_canvasHeight);
   
-  vec2 posPanNote = vec2(0.0, GetNoteFromPx(length(posXY - originXY), u_canvasHeight));  
+  vec2 posPanNote = vec2(0.0, note);
   vec4 background = bg(posPanNote);
   
-  vec3 foreground = vec3(0.0);
+  vec3 foreground = fg(note);
 
+                             
   foreground += sphere(gl_FragCoord.xy, u_bubbleLocations[0].xy, u_bubbleLocations[0].z);
   foreground += sphere(gl_FragCoord.xy, u_bubbleLocations[1].xy, u_bubbleLocations[1].z);
 
