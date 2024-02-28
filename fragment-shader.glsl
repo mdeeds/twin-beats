@@ -4,7 +4,7 @@ varying vec2 v_position;
 
 uniform float u_canvasWidth;
 uniform float u_canvasHeight;
-uniform vec4 u_bubbleLocations[64];
+uniform vec4 u_bubbleLocations[16];
 
 // 1024 pixels wide, 16 pixels tall.  Monochrome texture.
 uniform sampler2D spectrogramTexture;
@@ -50,11 +50,11 @@ vec4 bg(in vec2 posPanNote) {
   return vec4(c, c, c, 1.0);
 }
 
-vec3 fg(in float note) {
+vec3 fg(in float note, in int bubble) {
   float mag = abs(5.0 * ((gl_FragCoord.x / u_canvasWidth) - 0.5));
-  float bin = GetBinFromHz(GetHzFromNote(note)) / BIN_COUNT;
+  float bin = (GetBinFromHz(GetHzFromNote(note)) + 0.5) / BIN_COUNT;
   // float bin = gl_FragCoord.y / u_canvasHeight;
-  float t = texture2D(spectrogramTexture, vec2(bin, 0)).r;
+  float t = texture2D(spectrogramTexture, vec2(bin, (0.5 + float(bubble)) / 16.0)).r;
   if (t > mag) {
     float q = pow(t - mag, 0.2);
     return vec3(q, q, q);
@@ -75,16 +75,21 @@ void main() {
   float slope = relXY.x / relXY.y;
   float criticalSlope = (0.5 * u_canvasWidth) / (1.5 * u_canvasHeight);
 
-  vec3 foreground = vec3(0, 0, 0);
-  foreground += sphere(gl_FragCoord.xy, u_bubbleLocations[0].xy, u_bubbleLocations[0].z);
-  foreground += sphere(gl_FragCoord.xy, u_bubbleLocations[1].xy, u_bubbleLocations[1].z);
+  vec3 foreground = vec3(0.0, 0.0, 0.0);
+
+  for (int i = 0; i < 16; ++i) {
+    if (u_bubbleLocations[i].z > 0.0) {
+      foreground += sphere(gl_FragCoord.xy, u_bubbleLocations[i].xy, u_bubbleLocations[i].z);
+      foreground += fg(note, i);
+    }
+  }
+
   vec4 background;
   if ((slope > 0.0 && slope > criticalSlope) ||
       (slope < 0.0 && slope < -criticalSlope)) {
     background = vec4(0.9, 1.0, 1.0, 1.0);
   } else {
     vec2 posPanNote = vec2(0.0, note);
-    foreground += fg(note);
     background = bg(posPanNote);
   }
   gl_FragColor = background - vec4(foreground, 0.0);
