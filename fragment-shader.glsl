@@ -75,15 +75,17 @@ void main() {
   float slope = relXY.x / relXY.y;
   float criticalSlope = (0.5 * u_canvasWidth) / (1.5 * u_canvasHeight);
 
-  vec2 posPanNote = vec2(0.0, note);
+  vec3 foreground = vec3(0, 0, 0);
+  foreground += sphere(gl_FragCoord.xy, u_bubbleLocations[0].xy, u_bubbleLocations[0].z);
+  foreground += sphere(gl_FragCoord.xy, u_bubbleLocations[1].xy, u_bubbleLocations[1].z);
+  vec4 background;
   if ((slope > 0.0 && slope > criticalSlope) ||
       (slope < 0.0 && slope < -criticalSlope)) {
-    gl_FragColor = vec4(0.9, 1.0, 1.0, 1.0);
+    background = vec4(0.9, 1.0, 1.0, 1.0);
   } else {
-    vec4 background = bg(posPanNote);
-    vec3 foreground = fg(note);
-    foreground += sphere(gl_FragCoord.xy, u_bubbleLocations[0].xy, u_bubbleLocations[0].z);
-    foreground += sphere(gl_FragCoord.xy, u_bubbleLocations[1].xy, u_bubbleLocations[1].z);
-    gl_FragColor = background - vec4(foreground, 0.0);
+    vec2 posPanNote = vec2(0.0, note);
+    foreground += fg(note);
+    background = bg(posPanNote);
   }
+  gl_FragColor = background - vec4(foreground, 0.0);
 }
