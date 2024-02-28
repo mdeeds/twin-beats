@@ -51,27 +51,39 @@ vec4 bg(in vec2 posPanNote) {
 }
 
 vec3 fg(in float note) {
+  float mag = abs(5.0 * ((gl_FragCoord.x / u_canvasWidth) - 0.5));
   float bin = GetBinFromHz(GetHzFromNote(note)) / BIN_COUNT;
   // float bin = gl_FragCoord.y / u_canvasHeight;
   float t = texture2D(spectrogramTexture, vec2(bin, 0)).r;
-  return vec3(t, t, t);
+  if (t > mag) {
+    float q = pow(t - mag, 0.2);
+    return vec3(q, q, q);
+  } else {
+    return vec3(0.0, 0.0, 0.0);
+  }
 }
 
 void main() {
   vec2 posXY = gl_FragCoord.xy;
+  vec2 relXY = gl_FragCoord.xy - vec2(u_canvasWidth * 0.5, -0.5 * u_canvasHeight);
 
   vec2 originXY = vec2(u_canvasWidth * 0.5, -u_canvasHeight * 0.5);
 
   float note = GetNoteFromPx(length(posXY - originXY) - 0.5 * u_canvasHeight, u_canvasHeight);
-  
+
+  // Note: slope is defined opposite the usual way because dx could be zero, but dy will never be zero.
+  float slope = relXY.x / relXY.y;
+  float criticalSlope = (0.5 * u_canvasWidth) / (1.5 * u_canvasHeight);
+
   vec2 posPanNote = vec2(0.0, note);
-  vec4 background = bg(posPanNote);
-  
-  vec3 foreground = fg(note);
-
-                             
-  foreground += sphere(gl_FragCoord.xy, u_bubbleLocations[0].xy, u_bubbleLocations[0].z);
-  foreground += sphere(gl_FragCoord.xy, u_bubbleLocations[1].xy, u_bubbleLocations[1].z);
-
-  gl_FragColor = background - vec4(foreground, 0.0);
+  if ((slope > 0.0 && slope > criticalSlope) ||
+      (slope < 0.0 && slope < -criticalSlope)) {
+    gl_FragColor = vec4(0.9, 1.0, 1.0, 1.0);
+  } else {
+    vec4 background = bg(posPanNote);
+    vec3 foreground = fg(note);
+    foreground += sphere(gl_FragCoord.xy, u_bubbleLocations[0].xy, u_bubbleLocations[0].z);
+    foreground += sphere(gl_FragCoord.xy, u_bubbleLocations[1].xy, u_bubbleLocations[1].z);
+    gl_FragColor = background - vec4(foreground, 0.0);
+  }
 }

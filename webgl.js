@@ -197,9 +197,10 @@ async function getAudioChirpNode() {
     const audioCtx = new AudioContext();
 
     const osc = audioCtx.createOscillator();
-    osc.type = 'sawtooth';
+    osc.type = 'square';
+    osc.frequency.setValueAtTime(440, audioCtx.currentTime);
     const gain = audioCtx.createGain();
-    gain.gain.setValueAtTime(300, audioCtx.currentTime);
+    gain.gain.setValueAtTime(1200, audioCtx.currentTime);
     const lfo = audioCtx.createOscillator();
     lfo.frequency.setValueAtTime(0.5, audioCtx.currentTime);
     lfo.connect(gain);
@@ -215,6 +216,7 @@ async function getAudioChirpNode() {
 async function getAnalyser() {
     const source = await getAudioChirpNode();
     const analyser = source.context.createAnalyser();
+    analyser.smoothingTimeConstant = 0.4;
     source.connect(analyser);
     return analyser;
 }
