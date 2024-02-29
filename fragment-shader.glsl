@@ -47,13 +47,37 @@ float GetPxFromNote(in float note, in float pixelSpan) {
 
 vec4 bg(in vec2 posPanNote) {
   float c = 0.9 + 0.05 * sin(posPanNote.y / 12.0 * 3.1415 * 2.0);
-  return vec4(c, c, c, 1.0);
+  float d = 0.9 + 0.05 * cos(3.14 * 10.0 * posPanNote.x);
+  return vec4(c, c*d, d, 1.0);
 }
 
-vec3 fg(in float note, in int bubble) {
-  float mag = abs(5.0 * ((gl_FragCoord.x / u_canvasWidth) - 0.5));
+float GetPanFromXY(in vec2 pos) {
+  // This is the percentage of the way up the screen
+  float q = pos.y / u_canvasHeight;
+  // This is the percentage of the way down.
+  float p = 1.0 - q;
+  // The width of the view region at pos.y
+  float width = q * u_canvasWidth + p * 0.33333 * u_canvasWidth;
+  float dx = pos.x - (0.5 * u_canvasWidth);
+  float pan = dx / (width * 0.5);
+  return pan;
+}
+
+float GetXFromPanAndY(in float pan, in float y) {
+  float q = y / u_canvasHeight;
+  float p = 1.0 - q;
+  float width = q * u_canvasWidth + p * 0.33333 * u_canvasWidth;
+  float dx = pan * width * 0.5;
+  float posX = dx + (0.5 * u_canvasWidth);
+  return posX;
+}
+
+vec3 fg(in float note, in int bubble, in float pan, in vec2 bubbleXY) {
+  float bPan = GetPanFromXY(bubbleXY);
+  float bX = GetXFromPanAndY(bPan, gl_FragCoord.y);
+  float mag = 0.01 * abs(bX - gl_FragCoord.x);
+  
   float bin = (GetBinFromHz(GetHzFromNote(note)) + 0.5) / BIN_COUNT;
-  // float bin = gl_FragCoord.y / u_canvasHeight;
   float t = texture2D(spectrogramTexture, vec2(bin, (0.5 + float(bubble)) / 16.0)).r;
   if (t > mag) {
     float q = pow(t - mag, 0.2);
@@ -62,7 +86,7 @@ vec3 fg(in float note, in int bubble) {
     return vec3(0.0, 0.0, 0.0);
   }
 }
-
+                  
 void main() {
   vec2 posXY = gl_FragCoord.xy;
   vec2 relXY = gl_FragCoord.xy - vec2(u_canvasWidth * 0.5, -0.5 * u_canvasHeight);
@@ -76,20 +100,25 @@ void main() {
   float criticalSlope = (0.5 * u_canvasWidth) / (1.5 * u_canvasHeight);
 
   vec3 foreground = vec3(0.0, 0.0, 0.0);
+  bool isActiveArea = ((slope > 0.0 && slope > criticalSlope) ||
+                       (slope < 0.0 && slope < -criticalSlope));
 
+  float posPan = GetPanFromXY(gl_FragCoord.xy);
   for (int i = 0; i < 16; ++i) {
     if (u_bubbleLocations[i].z > 0.0) {
       foreground += sphere(gl_FragCoord.xy, u_bubbleLocations[i].xy, u_bubbleLocations[i].z);
-      foreground += fg(note, i);
+      if (!isActiveArea) {
+        float pan = GetPanFromXY(u_bubbleLocations[i].xy);
+        foreground += fg(note, i, pan, u_bubbleLocations[i].xy);
+      }
     }
   }
 
   vec4 background;
-  if ((slope > 0.0 && slope > criticalSlope) ||
-      (slope < 0.0 && slope < -criticalSlope)) {
+  if (isActiveArea) {
     background = vec4(0.9, 1.0, 1.0, 1.0);
   } else {
-    vec2 posPanNote = vec2(0.0, note);
+    vec2 posPanNote = vec2(posPan, note);
     background = bg(posPanNote);
   }
   gl_FragColor = background - vec4(foreground, 0.0);
