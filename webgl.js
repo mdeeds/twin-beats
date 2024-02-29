@@ -152,13 +152,17 @@ runRenderLoop = async function(analyser) {
     canvas.addEventListener('mouseup', (event) => circles.handleMouse(event));
 
     const spectrogramData = new Uint8Array(16 * 1024);
+    const singleSpect = new Uint8Array(1024);
 
     renderLoop = () => {
         circles.move(0, 0.5, 0);
         circles.move(1, -0.1, 0.1);
         gl.uniform4fv(bubbleLocations, circles.flatData);
 
-        analyser.getByteFrequencyData(spectrogramData);
+        for (let i = 0; i < 16; ++i) {
+            analyser.getByteFrequencyData(singleSpect);
+            spectrogramData.set(singleSpect, i * 1024);
+        }
         // Update texture data
         gl.bindTexture(gl.TEXTURE_2D, texture);
 
