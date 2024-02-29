@@ -151,17 +151,29 @@ runRenderLoop = async function(analyser) {
     canvas.addEventListener('mousemove', (event) => circles.handleMouse(event));
     canvas.addEventListener('mouseup', (event) => circles.handleMouse(event));
 
-    const spectrogramData = new Uint8Array(16 * 1024);
-    const singleSpect = new Uint8Array(1024);
-
+    // getByteFrequencyData: 330ms / 3647ms scripting
+    // 52ms system
+    // getFloatFrequencyData: 1030ms / 3530 ms scripting
+    // 112ms system
+    // Note: Most of the cost is due to the new code which converts dB to amplitude.
+    // Calculating the FFTs is pretty quick.
     renderLoop = () => {
+        // It's a tiny bit cheaper to put these here instead of outside of the loop.
+        const spectrogramData = new Uint8Array(16 * 1024);
+        const singleSpect = new Float32Array(1024);
         circles.move(0, 0.5, 0);
         circles.move(1, -0.1, 0.1);
         gl.uniform4fv(bubbleLocations, circles.flatData);
 
         for (let i = 0; i < 16; ++i) {
-            analyser.getByteFrequencyData(singleSpect);
-            spectrogramData.set(singleSpect, i * 1024);
+            analyser.getFloatFrequencyData(singleSpect);
+            const offset = 1024 * i;
+            for (let j = 0; j < 1024; ++j) {
+                // "Decibels and Levels" by Audio Engineering Society (AES): https://aes2.org/
+                // We use 20 here because we want amplitude, not power.
+                const v = Math.pow(10, singleSpect[j] / 20);
+                spectrogramData[offset + j] = Math.max(0, Math.min(255, 255 * v));
+            }
         }
         // Update texture data
         gl.bindTexture(gl.TEXTURE_2D, texture);
@@ -214,12 +226,11 @@ async function getAudioChirpNode() {
     lfo.start(audioCtx.currentTime);
     return osc;
 }
-    
-
 
 async function getAnalyser() {
     const source = await getAudioChirpNode();
     const analyser = source.context.createAnalyser();
+    analyser.fftSize = 2048;
     analyser.smoothingTimeConstant = 0.4;
     source.connect(analyser);
     return analyser;

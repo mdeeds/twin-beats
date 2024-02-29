@@ -75,7 +75,7 @@ float GetXFromPanAndY(in float pan, in float y) {
 vec3 fg(in float note, in int bubble, in float pan, in vec2 bubbleXY) {
   float bPan = GetPanFromXY(bubbleXY);
   float bX = GetXFromPanAndY(bPan, gl_FragCoord.y);
-  float mag = 0.01 * abs(bX - gl_FragCoord.x);
+  float mag = 0.001 * abs(bX - gl_FragCoord.x);
   
   float bin = (GetBinFromHz(GetHzFromNote(note)) + 0.5) / BIN_COUNT;
   float t = texture2D(spectrogramTexture, vec2(bin, (0.5 + float(bubble)) / 16.0)).r;
