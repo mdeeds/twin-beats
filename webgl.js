@@ -227,8 +227,13 @@ async function getAudioChirpNode() {
     return osc;
 }
 
-async function getAnalyser() {
-    const source = await getAudioSourceNode();
+async function getAnalyser(live) {
+    let source;
+    if (live) {
+        source = await getAudioSourceNode();
+    } else {
+        source = await getAudioChirpNode();
+    }
     const analyser = source.context.createAnalyser();
     analyser.fftSize = 2048;
     analyser.smoothingTimeConstant = 0.4;
@@ -236,18 +241,29 @@ async function getAnalyser() {
     return analyser;
 }
 
-init = async function() {
-    const analyser = await getAnalyser();
+init = async function(live) {
+    const analyser = await getAnalyser(live);
     await runRenderLoop(analyser);
 }
 
 
 go = async function() {
+    {
     const button = document.createElement('button');
     button.innerText = 'GO';
     document.body.appendChild(button);
     button.addEventListener('click', () => {
         document.body.removeChild(button);
-        init();
+        init(false);
     });
+    }
+    {
+    const button = document.createElement('button');
+    button.innerText = 'Live';
+    document.body.appendChild(button);
+    button.addEventListener('click', () => {
+        document.body.removeChild(button);
+        init(true);
+    });
+    }
 }
