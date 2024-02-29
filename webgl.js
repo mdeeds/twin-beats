@@ -228,7 +228,7 @@ async function getAudioChirpNode() {
 }
 
 async function getAnalyser() {
-    const source = await getAudioChirpNode();
+    const source = await getAudioSourceNode();
     const analyser = source.context.createAnalyser();
     analyser.fftSize = 2048;
     analyser.smoothingTimeConstant = 0.4;
