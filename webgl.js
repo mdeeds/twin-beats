@@ -97,6 +97,8 @@ class Circles {
     constructor() {
         this.flatData = [];
         this.numCircles = 0;
+        this.dragging = -1;
+        this.dxy = [];
     }
 
     add(x, y, r) {
@@ -107,6 +109,10 @@ class Circles {
     move(i, dx, dy) {
         this.flatData[i * 4] += dx;
         this.flatData[i * 4 + 1] += dy;
+    }
+    set(i, x, y) {
+        this.flatData[i * 4] = x;
+        this.flatData[i * 4 + 1] = y;
     }
 
     // Returns true if x,y intersects circle i.
@@ -119,17 +125,26 @@ class Circles {
     
     handleMouse(event) {
         if (event.type == 'mousedown') {
-            console.log('down');
             const rect = event.target.getBoundingClientRect();
             const x = event.clientX - rect.left;
             const y = rect.bottom - event.clientY;
             for (let i = 0; i < this.numCircles; ++i) {
                 if (this._checkCollision(i, x, y)) {
-                    console.log(`Clicked on ${i}`);
+                    this.dragging = i;
+                    this.dxy = [x - this.flatData[i * 4 + 0],
+                                y - this.flatData[i * 4 + 1]];
+                    break;
                 }
             }
         } else if (event.type == 'mouseup') {
-            console.log('up');
+            this.dragging = -1;
+        } else  if (event.type == 'mousemove') {
+            if (this.dragging >=0) {
+                const rect = event.target.getBoundingClientRect();
+                const x = event.clientX - rect.left;
+                const y = rect.bottom - event.clientY;
+                this.set(this.dragging, x - this.dxy[0], y - this.dxy[1]);
+            }
         }
     }
 }
@@ -161,8 +176,6 @@ runRenderLoop = async function(analyser) {
         // It's a tiny bit cheaper to put these here instead of outside of the loop.
         const spectrogramData = new Uint8Array(16 * 1024);
         const singleSpect = new Float32Array(1024);
-        circles.move(0, 0.5, 0);
-        circles.move(1, -0.1, 0.1);
         gl.uniform4fv(bubbleLocations, circles.flatData);
 
         for (let i = 0; i < 16; ++i) {
@@ -204,7 +217,7 @@ async function getAudioSourceNode() {
             },
         },
     });
-    console.log(`Strem: ${stream.id}`);
+    console.log(`Stream: ${stream.id}`);
     const source = audioCtx.createMediaStreamSource(stream);
     return source;
 }
@@ -248,7 +261,6 @@ init = async function(live) {
 
 
 go = async function() {
-
     const goButton = document.createElement('button');
     goButton.innerText = 'GO';
     document.body.appendChild(goButton);
