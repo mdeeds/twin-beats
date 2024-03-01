@@ -248,22 +248,24 @@ init = async function(live) {
 
 
 go = async function() {
-    {
-    const button = document.createElement('button');
-    button.innerText = 'GO';
-    document.body.appendChild(button);
-    button.addEventListener('click', () => {
-        document.body.removeChild(button);
-        init(false);
-    });
-    }
-    {
-    const button = document.createElement('button');
-    button.innerText = 'Live';
-    document.body.appendChild(button);
-    button.addEventListener('click', () => {
-        document.body.removeChild(button);
+
+    const goButton = document.createElement('button');
+    goButton.innerText = 'GO';
+    document.body.appendChild(goButton);
+    
+    const liveButton = document.createElement('button');
+    liveButton.innerText = 'Live';
+    document.body.appendChild(liveButton);
+
+    liveButton.addEventListener('click', () => {
+        document.body.removeChild(goButton);
+        document.body.removeChild(liveButton);
         init(true);
     });
-    }
+
+    goButton.addEventListener('click', () => {
+        document.body.removeChild(goButton);
+        document.body.removeChild(liveButton);
+        init(false);
+    });
 }
