@@ -93,6 +93,44 @@ setUpTexture = async function(gl, program) {
     return texture;
 }
 
+class PannedSound {
+    constructor(source) {
+        this.source = source;
+        this.audioCtx = source.context;
+        this.panNode = this.audioCtx.createStereoPanner();
+        this.maxHaasDelay = 0.18 / 343.0; // 343 = speed of sound 0.18 = distance between ears.
+        this.source.connect(this.panNode);
+        this.leftDelay = this.audioCtx.createDelay();
+        this.rightDelay = this.audioCtx.createDelay();
+        this.merger = this.audioCtx.createChannelMerger(2);
+        this.leftDelay.connect(merger,0,0);
+        this.rightDelay.connect(merger,0,1);
+        this.epsilon = 1 / 60.0;
+    }
+
+    setPan(panValue) {
+        // Set pan value (-1 to 1) on StereoPanNode
+        this.panNode.pan.linearRampToValueAtTime(panValue, this.audioCtx.currentTime + this.epsilon);
+        const panDelay = this.maxHaasDelay * Math.abs(panValue);
+
+        // Apply Haas delay to opposite channel
+        if (panValue > 0) {
+            // Panned right, delay left channel
+            this.leftDelay.linearRampToValueAtTime(panDelay, this.audioCtx.currentTime + this.epsilon);
+            this.rightDelay.linearRampToValueAtTime(0.0, this.audioCtx.currentTime + this.epsilon);
+        } else {
+            // Panned left, delay right channel
+            this.leftDelay.linearRampToValueAtTime(0, this.audioCtx.currentTime + this.epsilon);
+            this.rightDelay.linearRampToValueAtTime(panDelay, this.audioCtx.currentTime + this.epsilon);
+        }
+    }
+
+  connect(destination) {
+      merger.connect(this.audioCtx.destination);
+  }
+}
+
+
 class Circles {
     constructor() {
         this.flatData = [];
