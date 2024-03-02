@@ -130,6 +130,30 @@ class PannedSound {
   }
 }
 
+class FilteredSource {
+    constructor(source) {
+        this.source = source;
+        this.audioCtx = source.context;
+        this.lpf = audioCtx.createBiquadFilter("lowpass", { frequency: 15000 });
+        this.hpf = audioCtx.createBiquadFilter("highpass", { frequency: 20 });
+
+        source.connect(this.lpf);
+        this.lpf.connect(this.hpf);
+
+        this.epsilon = 1/60;
+    }
+
+    setCutoff(low, high) {
+        this.lpf.frequency.linearRampToValueAtTime(low, this.audioCtx.currentTime + this.epsilon);
+        this.hpf.frequency.linearRampToValueAtTime(high, this.audioCtx.currentTime + this.epsilon);
+    }
+
+    connect(destination) {
+        this.hpf.connect(destination);
+    }
+
+}
+
 
 class Circles {
     constructor() {
