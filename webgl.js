@@ -43,6 +43,53 @@ loadAndCompilePrograms = async function(gl) {
     return program;
 }
 
+setUpEnvironmentMap = function(gl, program) {
+    // Common settings for all faces
+    const level = 0; 
+    const internalFormat = gl.RGBA;
+    const border = 0;
+    const type = gl.UNSIGNED_BYTE;
+    
+    // Cubemap face definitions
+    const faceTargets = [
+        { target: gl.TEXTURE_CUBE_MAP_POSITIVE_X, color: [0.5, 0.5, 0.5, 1] }, // slate grey
+        { target: gl.TEXTURE_CUBE_MAP_NEGATIVE_X, color: [0.5, 0.5, 0.5, 1] }, // slate grey
+        { target: gl.TEXTURE_CUBE_MAP_POSITIVE_Y, color: [1, 1, 1, 1] },      // white
+        { target: gl.TEXTURE_CUBE_MAP_NEGATIVE_Y, color: [0.5, 0.5, 0.5, 1] }, // slate grey
+        { target: gl.TEXTURE_CUBE_MAP_POSITIVE_Z, color: [0.5, 0.5, 0.5, 1] }, // slate grey
+        { target: gl.TEXTURE_CUBE_MAP_NEGATIVE_Z, color: [0.5, 0.5, 0.5, 1] }, // slate grey
+    ];
+
+    const cubeMap = gl.createTexture();
+    gl.activeTexture(gl.TEXTURE1);
+    gl.bindTexture(gl.TEXTURE_CUBE_MAP, cubeMap);
+
+    // Temporary canvas for drawing the faces.
+    const canvas = document.createElement('canvas'); 
+    const ctx = canvas.getContext('2d');  
+    canvas.width = 128; 
+    canvas.height = 128;
+
+    // Configure each face of the cubemap
+    faceTargets.forEach(({ target, color }) => {
+        ctx.fillStyle = `rgba(${color.map(c => c * 255).join(',')})`;
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        ctx.fillStyle = 'red';
+        ctx.beginPath();
+        ctx.arc(64, 64, 60, -Math.PI, Math.PI);
+        ctx.fill();
+        
+        // Send image to the cubemap face
+        gl.texImage2D(target, level, internalFormat, canvas.width, canvas.height, border, internalFormat, type, ctx.getImageData(0, 0, canvas.width, canvas.height));
+    });
+
+    // Mipmap and filtering
+    gl.generateMipmap(gl.TEXTURE_CUBE_MAP);
+    gl.texParameteri(gl.TEXTURE_CUBE_MAP, gl.TEXTURE_MIN_FILTER, gl.LINEAR_MIPMAP_LINEAR);
+    const uCubeLocation = gl.getUniformLocation(program, 'u_environment');
+    gl.uniform1i(uCubeLocation, 1); // Bind to unit 1
+}
+
 setUpGeometry = async function(gl, program) {
     // Quad for rendering
     const vertices = new Float32Array([
@@ -77,6 +124,7 @@ setUpGeometry = async function(gl, program) {
 setUpTexture = async function(gl, program) {
     // Create a texture for storing data
     const texture = gl.createTexture();
+    gl.activeTexture(gl.TEXTURE0);
     gl.bindTexture(gl.TEXTURE_2D, texture);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
@@ -87,9 +135,9 @@ setUpTexture = async function(gl, program) {
     // Monochrome texture
     gl.texImage2D(gl.TEXTURE_2D, 0, gl.LUMINANCE, textureWidth, textureHeight,
                   0, gl.LUMINANCE, gl.UNSIGNED_BYTE, null);
+
     const uniformLocation = gl.getUniformLocation(program, "spectrogramTexture");
     gl.uniform1i(uniformLocation, 0); // Assuming texture unit 0
-
     return texture;
 }
 
@@ -150,9 +198,9 @@ class FilteredSource {
     }
 
     setCutoffHz(low, high) {
-        // If we try to set a cutoff above 20,000 Hz, the AudioAPI gets mad at us.
-        this.lpf.frequency.linearRampToValueAtTime(Math.min(20000, low), this.audioCtx.currentTime + this.epsilon);
-        this.hpf.frequency.linearRampToValueAtTime(high, this.audioCtx.currentTime + this.epsilon);
+        // If we try to set a cutoff above 24,000 Hz, the AudioAPI gets mad at us.
+        this.lpf.frequency.linearRampToValueAtTime(Math.min(24000, low), this.audioCtx.currentTime + this.epsilon);
+        this.hpf.frequency.linearRampToValueAtTime(Math.min(24000, high), this.audioCtx.currentTime + this.epsilon);
     }
 
     
@@ -399,6 +447,7 @@ runRenderLoop = async function(source) {
             }
         }
         // Update texture data
+        gl.activeTexture(gl.TEXTURE0);
         gl.bindTexture(gl.TEXTURE_2D, texture);
 
         // gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, 1024, 16, gl.LUMINANCE, gl.UNSIGNED_BYTE, spectrogramData);

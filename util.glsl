@@ -1,11 +1,18 @@
 precision mediump float; // You can choose between lowp, mediump, or highp
 
+uniform samplerCube u_environment;
+
 vec3 sphere(in vec2 look, in vec2 pos, in float radius) {
   vec2 delta = look - pos;
   if (length(delta) < radius) {
     vec3 surface = vec3(delta.xy, sqrt(abs(radius * radius - delta.x * delta.x - delta.y * delta.y)));
     surface = normalize(surface);
-    return vec3(0.05  / (surface.z + 0.001));
+    vec3 base = vec3(0.05  / (surface.z + 0.001));
+    vec3 reflection = reflect(vec3(0.0, 0.0, 1.0), surface);
+    // return base - textureCube(u_environment, reflection).rgb;
+    // return textureCube(u_environment, reflection).rgb;
+    // return reflection;
+    return base;
   } else {
     return vec3(0.0, 0.0, 0.0);
   }
