@@ -97,14 +97,20 @@ class PannedSound {
     constructor(source) {
         this.source = source;
         this.audioCtx = source.context;
-        this.panNode = this.audioCtx.createStereoPanner();
+
+        this.splitter = this.audioCtx.createChannelSplitter(2);
+        this.source.connect(this.splitter);
         this.maxHaasDelay = 0.18 / 343.0; // 343 = speed of sound 0.18 = distance between ears.
-        this.source.connect(this.panNode);
         this.leftDelay = this.audioCtx.createDelay();
         this.rightDelay = this.audioCtx.createDelay();
+        this.splitter.connect(this.leftDelay, 0); // Left channel to left delay
+        this.splitter.connect(this.rightDelay, 1); // Right channel to right delay
         this.merger = this.audioCtx.createChannelMerger(2);
-        this.leftDelay.connect(merger,0,0);
-        this.rightDelay.connect(merger,0,1);
+        this.leftDelay.connect(this.merger, 0, 0);
+        this.rightDelay.connect(this.merger, 0, 1);
+        this.panNode = this.audioCtx.createStereoPanner();
+        this.merger.connect(this.panNode);
+
         this.epsilon = 1 / 60.0;
     }
 
@@ -116,17 +122,17 @@ class PannedSound {
         // Apply Haas delay to opposite channel
         if (panValue > 0) {
             // Panned right, delay left channel
-            this.leftDelay.linearRampToValueAtTime(panDelay, this.audioCtx.currentTime + this.epsilon);
-            this.rightDelay.linearRampToValueAtTime(0.0, this.audioCtx.currentTime + this.epsilon);
+            this.leftDelay.delayTime.linearRampToValueAtTime(panDelay, this.audioCtx.currentTime + this.epsilon);
+            this.rightDelay.delayTime.linearRampToValueAtTime(0.0, this.audioCtx.currentTime + this.epsilon);
         } else {
             // Panned left, delay right channel
-            this.leftDelay.linearRampToValueAtTime(0, this.audioCtx.currentTime + this.epsilon);
-            this.rightDelay.linearRampToValueAtTime(panDelay, this.audioCtx.currentTime + this.epsilon);
+            this.leftDelay.delayTime.linearRampToValueAtTime(0, this.audioCtx.currentTime + this.epsilon);
+            this.rightDelay.delayTime.linearRampToValueAtTime(panDelay, this.audioCtx.currentTime + this.epsilon);
         }
     }
 
   connect(destination) {
-      merger.connect(this.audioCtx.destination);
+      this.merger.connect(destination);
   }
 }
 
@@ -134,8 +140,8 @@ class FilteredSource {
     constructor(source) {
         this.source = source;
         this.audioCtx = source.context;
-        this.lpf = audioCtx.createBiquadFilter("lowpass", { frequency: 15000 });
-        this.hpf = audioCtx.createBiquadFilter("highpass", { frequency: 20 });
+        this.lpf = this.audioCtx.createBiquadFilter("lowpass", { frequency: 15000 });
+        this.hpf = this.audioCtx.createBiquadFilter("highpass", { frequency: 20 });
 
         source.connect(this.lpf);
         this.lpf.connect(this.hpf);
@@ -143,28 +149,43 @@ class FilteredSource {
         this.epsilon = 1/60;
     }
 
-    setCutoff(low, high) {
-        this.lpf.frequency.linearRampToValueAtTime(low, this.audioCtx.currentTime + this.epsilon);
+    setCutoffHz(low, high) {
+        // If we try to set a cutoff above 20,000 Hz, the AudioAPI gets mad at us.
+        this.lpf.frequency.linearRampToValueAtTime(Math.min(20000, low), this.audioCtx.currentTime + this.epsilon);
         this.hpf.frequency.linearRampToValueAtTime(high, this.audioCtx.currentTime + this.epsilon);
+    }
+
+    
+    setCutoffNote(note) {
+        // We display 9 octaves of notes, so I'll set the cutoff at +/- 5 octaves.
+        // We set the low pass filter at the higher frequency.
+        const noteHz = 440 * Math.pow(2, (note - 69) / 12);
+        const lowHz = noteHz * Math.pow(2, 5);
+        const highHz = noteHz * Math.pow(2, -5);
+        this.setCutoffHz(lowHz, highHz);
     }
 
     connect(destination) {
         this.hpf.connect(destination);
     }
-
 }
 
 
 class Circles {
-    constructor() {
-        this.flatData = [];
+    constructor(maxNumCircles) {
+        this.flatData = new Float32Array(4 * maxNumCircles);
         this.numCircles = 0;
         this.dragging = -1;
         this.dxy = [];
+        this.changed = new Uint8ClampedArray(maxNumCircles);
     }
 
     add(x, y, r) {
-        this.flatData.push(x, y, r, 0);
+        const offset = this.numCircles * 4;
+        this.flatData[offset + 0] = x;
+        this.flatData[offset + 1] = y;
+        this.flatData[offset + 2] = r;
+        this.flatData[offset + 3] = 0;
         return ++this.numCircles;
     }
 
@@ -175,6 +196,19 @@ class Circles {
     set(i, x, y) {
         this.flatData[i * 4] = x;
         this.flatData[i * 4 + 1] = y;
+    }
+
+    getX(i) {
+        return this.flatData[i * 4];
+    }
+    getY(i) {
+        return this.flatData[i * 4 + 1];
+    }
+    
+    hasChanged(i) {
+        const result = !!this.changed[i];
+        this.changed[i] = 0;
+        return result;
     }
 
     // Returns true if x,y intersects circle i.
@@ -206,12 +240,79 @@ class Circles {
                 const x = event.clientX - rect.left;
                 const y = rect.bottom - event.clientY;
                 this.set(this.dragging, x - this.dxy[0], y - this.dxy[1]);
+                this.changed[this.dragging] = 1;
             }
         }
     }
 }
 
-runRenderLoop = async function(analyser) {
+getPanFromXY = function(x, y, rect) {
+  // This is the percentage of the way up the screen
+    const q = y / rect.height;
+    // This is the percentage of the way down.
+    const p = 1.0 - q;
+    // The width of the view region at pos.y
+    const width = q * rect.width + p * rect.width / 3.0;
+    const dx = x - (0.5 * rect.width);
+    const pan = dx / (width * 0.5);
+    return pan;
+}
+
+const BOTTOM_NOTE = 21.0;
+const TOP_NOTE = 129.0;
+
+getNoteFromPx = function(px, pixelSpan) {
+  return BOTTOM_NOTE + (TOP_NOTE - BOTTOM_NOTE) * (px / pixelSpan);
+}
+
+getNoteFromXY = function(x, y, rect) {
+    const originX = rect.width / 2;
+    const originY = -rect.height / 2;
+    const dx = x - originX;
+    const dy = y - originY;
+    const px = Math.sqrt(dx * dx + dy * dy);
+    return getNoteFromPx(px, rect.height);
+}
+
+
+class Tracks {
+    constructor(maxNumTracks) {
+        this.filters = [];
+        this.analysers = [];
+        this.panners = [];
+    }
+    
+    add(source) {
+        // Connect source to new Filter
+        const filter = new FilteredSource(source);
+        this.filters.push(filter);
+       // Connect filter to a new analyser
+        const analyser = source.context.createAnalyser();
+        filter.connect(analyser);
+        analyser.fftSize = 2048;
+        analyser.smoothingTimeConstant = 0.4;
+        // analyser.connect(gain);
+        this.analysers.push(analyser);
+        // Connect analyser to new Panner  // Some weirdness happens HERE!!
+        const gain = source.context.createGain();
+        filter.connect(gain);
+        const panner = new PannedSound(gain);
+        this.panners.push(panner);
+        // Connect to speakers
+        analyser.connect(source.context.destination);
+    }
+
+    getAnalyser(i) {
+        return this.analysers[i];
+    }
+
+    setParams(i, x, y, rect) {
+        this.panners[i].setPan(getPanFromXY(x, y, rect));
+        this.filters[i].setCutoffNote(getNoteFromXY(x, y, rect));
+    }
+}
+
+runRenderLoop = async function(source) {
     const canvas = document.getElementById('myCanvas');
     const gl = canvas.getContext('webgl');    
     const program = await loadAndCompilePrograms(gl);
@@ -221,7 +322,10 @@ runRenderLoop = async function(analyser) {
     const texture = await setUpTexture(gl, program);
     
     const bubbleLocations = gl.getUniformLocation(program, 'u_bubbleLocations');
-    const circles = new Circles();
+    const circles = new Circles(16);
+    const tracks = new Tracks(16);
+    tracks.add(source);
+    tracks.add(source);
     circles.add(300, 300, 50);
     circles.add(500, 300, 40);
     canvas.addEventListener('mousedown', (event) => circles.handleMouse(event));
@@ -234,6 +338,10 @@ runRenderLoop = async function(analyser) {
     // 112ms system
     // Note: Most of the cost is due to the new code which converts dB to amplitude.
     // Calculating the FFTs is pretty quick.
+
+    // Need to do this right and also maybe update when the screen resizes???
+    const rect = canvas.getBoundingClientRect();
+
     renderLoop = () => {
         // It's a tiny bit cheaper to put these here instead of outside of the loop.
         const spectrogramData = new Uint8Array(16 * 1024);
@@ -241,6 +349,8 @@ runRenderLoop = async function(analyser) {
         gl.uniform4fv(bubbleLocations, circles.flatData);
 
         for (let i = 0; i < 16; ++i) {
+            const analyser = tracks.getAnalyser(i);
+            if (!analyser) { continue; }
             analyser.getFloatFrequencyData(singleSpect);
             const offset = 1024 * i;
             for (let j = 0; j < 1024; ++j) {
@@ -248,6 +358,9 @@ runRenderLoop = async function(analyser) {
                 // We use 20 here because we want amplitude, not power.
                 const v = Math.pow(10, singleSpect[j] / 20);
                 spectrogramData[offset + j] = Math.max(0, Math.min(255, 255 * v));
+            }
+            if (circles.hasChanged(i)) {
+                tracks.setParams(i, circles.getX(i), circles.getY(i), rect);
             }
         }
         // Update texture data
@@ -302,23 +415,19 @@ async function getAudioChirpNode() {
     return osc;
 }
 
-async function getAnalyser(live) {
+async function getSource(live) {
     let source;
     if (live) {
         source = await getAudioSourceNode();
     } else {
         source = await getAudioChirpNode();
     }
-    const analyser = source.context.createAnalyser();
-    analyser.fftSize = 2048;
-    analyser.smoothingTimeConstant = 0.4;
-    source.connect(analyser);
-    return analyser;
+    return source;
 }
 
 init = async function(live) {
-    const analyser = await getAnalyser(live);
-    await runRenderLoop(analyser);
+    const source = await getSource(live);
+    await runRenderLoop(source);
 }
 
 
