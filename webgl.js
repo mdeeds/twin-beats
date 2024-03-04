@@ -162,6 +162,7 @@ class FilteredSource {
         const noteHz = 440 * Math.pow(2, (note - 69) / 12);
         const lowHz = noteHz * Math.pow(2, 5);
         const highHz = noteHz * Math.pow(2, -5);
+        console.log(`Note: ${note}; low: ${lowHz}; high: ${highHz}`);
         this.setCutoffHz(lowHz, highHz);
     }
 
@@ -271,9 +272,8 @@ getNoteFromXY = function(x, y, rect) {
     const dx = x - originX;
     const dy = y - originY;
     const px = Math.sqrt(dx * dx + dy * dy);
-    return getNoteFromPx(px, rect.height);
+    return getNoteFromPx(px - originY, rect.height);
 }
-
 
 class Tracks {
     constructor(maxNumTracks) {
@@ -310,6 +310,41 @@ class Tracks {
         this.panners[i].setPan(getPanFromXY(x, y, rect));
         this.filters[i].setCutoffNote(getNoteFromXY(x, y, rect));
     }
+}
+
+function findPeaks(audioData, sampleRate) {
+    const decayTime = 1 / 20; // 1/20th of a second
+    const decayFactor = Math.pow(0.01, 1 / (decayTime * sampleRate)); // Calculate decay factor
+    const highPassDelay = Math.floor(decayTime * sampleRate); // Delay for high pass filter
+    
+    const processedData = new Float32Array(audioData.length);
+    let lowPassAverage = 0;
+    let highPassDelayLine = new Float32Array(highPassDelay);
+
+    let maxOutput = 0;
+    for (let i = 0; i < audioData.length; i++) {
+        // Low pass filter with decay
+        lowPassAverage = decayFactor * lowPassAverage + (1 - decayFactor) * Math.abs(audioData[i]);
+        processedData[i] = lowPassAverage;
+        
+        // High pass filter
+        if (i >= highPassDelay) {
+            processedData[i] -= highPassDelayLine[i % highPassDelay]; // Subtract delayed low pass value
+        }
+        maxOutput = Math.max(processedData[i], maxOutput);
+        highPassDelayLine[i % highPassDelay] = lowPassAverage; // Update delay line
+    }
+    
+    // Normalize the output between 0 and 1.
+    const scale = 1.0 / maxOutput;
+    for (let i = 0; i < processedData.length; ++i) {
+        if (processedData[i] < 0) {
+            processedData[i] = 0;
+        } else {
+            processedData[i] *= scale;
+        }
+    }
+    return processedData;
 }
 
 runRenderLoop = async function(source) {
