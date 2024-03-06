@@ -54,12 +54,13 @@ setUpEnvironmentMap = function(gl, program) {
     const faceTargets = [
         { target: gl.TEXTURE_CUBE_MAP_POSITIVE_X, color: [0.5, 0.5, 0.5, 1] }, // slate grey
         { target: gl.TEXTURE_CUBE_MAP_NEGATIVE_X, color: [0.5, 0.5, 0.5, 1] }, // slate grey
-        { target: gl.TEXTURE_CUBE_MAP_POSITIVE_Y, color: [1, 1, 1, 1] },      // white
+        { target: gl.TEXTURE_CUBE_MAP_POSITIVE_Y, color: [1.0, 1.0, 1.0, 1] },      // white
         { target: gl.TEXTURE_CUBE_MAP_NEGATIVE_Y, color: [0.5, 0.5, 0.5, 1] }, // slate grey
         { target: gl.TEXTURE_CUBE_MAP_POSITIVE_Z, color: [0.5, 0.5, 0.5, 1] }, // slate grey
         { target: gl.TEXTURE_CUBE_MAP_NEGATIVE_Z, color: [0.5, 0.5, 0.5, 1] }, // slate grey
     ];
 
+    // Reference: https://webglfundamentals.org/webgl/lessons/webgl-2-textures.html
     const cubeMap = gl.createTexture();
     gl.activeTexture(gl.TEXTURE1);
     gl.bindTexture(gl.TEXTURE_CUBE_MAP, cubeMap);
@@ -80,7 +81,9 @@ setUpEnvironmentMap = function(gl, program) {
         ctx.fill();
         
         // Send image to the cubemap face
-        gl.texImage2D(target, level, internalFormat, canvas.width, canvas.height, border, internalFormat, type, ctx.getImageData(0, 0, canvas.width, canvas.height));
+        gl.texImage2D(target, level, internalFormat,
+                      canvas.width, canvas.height, border, internalFormat,
+                      type, ctx.getImageData(0, 0, canvas.width, canvas.height));
     });
 
     // Mipmap and filtering
@@ -320,7 +323,7 @@ getNoteFromXY = function(x, y, rect) {
     const dx = x - originX;
     const dy = y - originY;
     const px = Math.sqrt(dx * dx + dy * dy);
-    return getNoteFromPx(px - originY, rect.height);
+    return getNoteFromPx(px + originY, rect.height);
 }
 
 class Tracks {

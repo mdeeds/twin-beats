@@ -9,6 +9,7 @@ vec3 sphere(in vec2 look, in vec2 pos, in float radius) {
     surface = normalize(surface);
     vec3 base = vec3(0.05  / (surface.z + 0.001));
     vec3 reflection = reflect(vec3(0.0, 0.0, 1.0), surface);
+    // Reference: https://webglfundamentals.org/webgl/lessons/webgl-2-textures.html
     // return base - textureCube(u_environment, reflection).rgb;
     // return textureCube(u_environment, reflection).rgb;
     // return reflection;
