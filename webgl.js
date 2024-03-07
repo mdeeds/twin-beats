@@ -15,7 +15,6 @@ loadAndCompilePrograms = async function(gl) {
         console.error('Error compiling vertex shader:', gl.getShaderInfoLog(vertexShader));
         return;
     }
-
     // Fragment Shader
     const fragmentShaderSource = (
         await getBody('util.glsl') + await getBody('fragment-shader.glsl'));
@@ -27,8 +26,7 @@ loadAndCompilePrograms = async function(gl) {
     if (!gl.getShaderParameter(fragmentShader, gl.COMPILE_STATUS)) {
         console.error('Error compiling fragment shader:', gl.getShaderInfoLog(fragmentShader));
         return;
-    }
-    
+    }    
     // Create the shader program
     const program = gl.createProgram();
     gl.attachShader(program, fragmentShader);
@@ -148,6 +146,7 @@ class PannedSound {
     constructor(source) {
         this.source = source;
         this.audioCtx = source.context;
+        this.epsilon = 1 / 60.0;
 
         this.splitter = this.audioCtx.createChannelSplitter(2);
         this.source.connect(this.splitter);
@@ -161,8 +160,6 @@ class PannedSound {
         this.rightDelay.connect(this.merger, 0, 1);
         this.panNode = this.audioCtx.createStereoPanner();
         this.merger.connect(this.panNode);
-
-        this.epsilon = 1 / 60.0;
     }
 
     setPan(panValue) {
@@ -181,10 +178,10 @@ class PannedSound {
             this.rightDelay.delayTime.linearRampToValueAtTime(panDelay, this.audioCtx.currentTime + this.epsilon);
         }
     }
-
-  connect(destination) {
-      this.merger.connect(destination);
-  }
+    
+    connect(destination) {
+        this.merger.connect(destination);
+    }
 }
 
 class FilteredSource {
@@ -457,6 +454,60 @@ function findPeaks(audioData, sampleRate) {
     return processedData;
 }
 
+// An input which continuously listens to an audio signal
+class Microphone {
+    constructor(source) {
+        this.source = source;
+        this.setUp();
+        this.lastKey = '';
+        // Maximum buffer is 3 minutes.
+        this.activeBuffer = new Float32Array(Math.round(3 * 60 * this.source.context.sampleRate));
+    }
+
+    async setUp() {
+        await this.source.context.audioWorklet.addModule("work-worker.js");
+        this.workletNode = new AudioWorkletNode(this.source.context, "recorder-worklet");
+        this.workletNode.port.onmessage = function (event) {
+            console.log(event.data);
+        };
+        this.source.connect(this.workletNode);
+        this.recordParam = this.workletNode.parameters.get("record");
+        this.playParam = this.workletNode.parameters.get("play");
+        this.state = 'paused';
+
+        const transitionMap = { paused: 'record', record: 'overdub', overdub: 'play' };
+        
+        document.body.addEventListener('keydown', (event) => {
+            // I think I want to change this so there is no overdub
+            // mode.  Instead, the second press just sets the loop
+            // length and it continues to dump out tracks at that
+            // cadence.  The next press will stop dumping tracks.
+            // Conceptually, very similar, but there isn't a "play" mode.
+            if (this.lastKey == event.code) return;
+            this.lastKey = event.code;
+            if (event.code == 'Space') {
+                this.state = transitionMap[this.state];
+            }
+            if (this.state == 'record') {
+                this.recordParam.setValueAtTime(1, this.source.context.currentTime);
+                this.playParam.setValueAtTime(0, this.source.context.currentTime);
+            } else if (this.state = 'overdub') {
+                this.recordParam.setValueAtTime(1, this.source.context.currentTime);
+                this.playParam.setValueAtTime(1, this.source.context.currentTime);
+            } else if (this.state = 'play') {
+                this.recordParam.setValueAtTime(0, this.source.context.currentTime);
+                this.playParam.setValueAtTime(1, this.source.context.currentTime);
+            }
+        });
+
+        document.body.addEventListener('keyup', () => { this.lastKey = ''; });
+    }
+
+    
+    
+}
+
+
 runRenderLoop = async function(source) {
     const canvas = document.getElementById('myCanvas');
     const gl = canvas.getContext('webgl');    
@@ -573,6 +624,7 @@ async function getSource(live) {
 
 init = async function(live) {
     const source = await getSource(live);
+    const mic = new Microphone(source);
     await runRenderLoop(source);
 }
 
