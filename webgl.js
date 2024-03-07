@@ -170,12 +170,16 @@ class PannedSound {
         // Apply Haas delay to opposite channel
         if (panValue > 0) {
             // Panned right, delay left channel
-            this.leftDelay.delayTime.linearRampToValueAtTime(panDelay, this.audioCtx.currentTime + this.epsilon);
-            this.rightDelay.delayTime.linearRampToValueAtTime(0.0, this.audioCtx.currentTime + this.epsilon);
+            this.leftDelay.delayTime.linearRampToValueAtTime(
+                panDelay, this.audioCtx.currentTime + this.epsilon);
+            this.rightDelay.delayTime.linearRampToValueAtTime(
+                0.0, this.audioCtx.currentTime + this.epsilon);
         } else {
             // Panned left, delay right channel
-            this.leftDelay.delayTime.linearRampToValueAtTime(0, this.audioCtx.currentTime + this.epsilon);
-            this.rightDelay.delayTime.linearRampToValueAtTime(panDelay, this.audioCtx.currentTime + this.epsilon);
+            this.leftDelay.delayTime.linearRampToValueAtTime(
+                0.0, this.audioCtx.currentTime + this.epsilon);
+            this.rightDelay.delayTime.linearRampToValueAtTime(
+                panDelay, this.audioCtx.currentTime + this.epsilon);
         }
     }
     
@@ -233,36 +237,52 @@ class FilteredSource {
         
         const totalMag = new Float32Array(mag);
         const totalPha = new Float32Array(pha);
-       this.lpf.getFrequencyResponse(hz, mag, pha);
-       for (let note = 0; note < hz.length; ++note) {
-           totalMag[note] *= mag[note];
-           totalPha[note] += pha[note];
-       }
-
+        this.lpf.getFrequencyResponse(hz, mag, pha);
+        for (let note = 0; note < hz.length; ++note) {
+            totalMag[note] *= mag[note];
+            totalPha[note] += pha[note];
+        }
+        
         const ctx = this.canvas.getContext('2d');
         ctx.fillStyle = '#999';
         ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
+
+        ctx.beginPath();
+        ctx.strokeStyle = '#455';
+        ctx.lineWidth = 1;
+        ctx.moveTo(this.canvas.width * 3 / 5, 0);
+        ctx.lineTo(this.canvas.width * 3 / 5, this.canvas.height);
+        ctx.stroke();
+        
         ctx.beginPath();
         ctx.strokeStyle = '#000';
         ctx.lineWidth = 3;
         ctx.moveTo(0, 0);
         for (let note = 0; note < hz.length; ++note) {
-            ctx.lineTo(totalMag[note] * (this.canvas.width * 3 / 5),
-                       (note / hz.length) * this.canvas.height);
+            const x = totalMag[note] * (this.canvas.width * 3 / 5);
+            const y = (1.0 - note / (hz.length - 1)) * this.canvas.height;
+            if (note == 0) {
+                ctx.moveTo(x, y);
+            } else {
+                ctx.lineTo(x,y);
+            }
         }
         ctx.stroke();
         ctx.beginPath();
-        ctx.moveTo(0, 0);
         ctx.lineWidth = 1;
         ctx.strokeStyle = '#922';
         for (let note = 0; note < hz.length; ++note) {
-            ctx.lineTo(totalPha[note] / Math.PI * (this.canvas.width * 0.5) + this.canvas.width * 0.5,
-                       (note / hz.length) * this.canvas.height);
+            const x = totalPha[note] / Math.PI * (this.canvas.width * 0.5) + this.canvas.width * 0.5;
+            const y = (1.0 - note / (hz.length - 1)) * this.canvas.height;
+            if (note == 0) {
+                ctx.moveTo(x,y);
+            } else {
+                ctx.lineTo(x, y);
+            }
         }
         ctx.stroke();
     }
 
-    
     setCutoffNote(note) {
         // We display 9 octaves of notes, so I'll set the cutoff at +/- 3 octaves.
         // We set the low pass filter at the higher frequency.
@@ -301,6 +321,7 @@ class Circles {
         this.flatData[i * 4] += dx;
         this.flatData[i * 4 + 1] += dy;
     }
+    
     set(i, x, y) {
         this.flatData[i * 4] = x;
         this.flatData[i * 4 + 1] = y;
@@ -309,6 +330,7 @@ class Circles {
     getX(i) {
         return this.flatData[i * 4];
     }
+    
     getY(i) {
         return this.flatData[i * 4 + 1];
     }
@@ -401,9 +423,9 @@ class Tracks {
         // analyser.connect(gain);
         this.analysers.push(analyser);
         // Connect analyser to new Panner  // Some weirdness happens HERE!!
-        const gain = source.context.createGain();
-        filter.connect(gain);
-        const panner = new PannedSound(gain);
+//        const gain = source.context.createGain();
+//        filter.connect(gain);
+        const panner = new PannedSound(analyser);
         this.panners.push(panner);
         // Connect to speakers
         analyser.connect(source.context.destination);
