@@ -191,29 +191,88 @@ class FilteredSource {
     constructor(source) {
         this.source = source;
         this.audioCtx = source.context;
-        this.lpf = this.audioCtx.createBiquadFilter("lowpass", { frequency: 15000 });
-        this.hpf = this.audioCtx.createBiquadFilter("highpass", { frequency: 20 });
-
+        this.epsilon = 1/60;
+        this.canvas = document.createElement('canvas');
+        this.canvas.width = 128;
+        this.canvas.height = 512;
+        document.body.appendChild(this.canvas);
+        
+        this.lpf = this.audioCtx.createBiquadFilter();
+        this.lpf.frequency.setValueAtTime(100, this.audioCtx.currentTime);
+        this.lpf.type = "lowpass";
+        this.lpf.Q.setValueAtTime(0.5, this.audioCtx.currentTime);
+        this.hpf = this.audioCtx.createBiquadFilter();
+        this.hpf.type = "highpass"
+        this.hpf.frequency.setValueAtTime(100, this.audioCtx.currentTime);
+        this.hpf.Q.setValueAtTime(0.1, this.audioCtx.currentTime);
+        this.setCutoffNote(60);  // Middle C
+        
         source.connect(this.lpf);
         this.lpf.connect(this.hpf);
 
-        this.epsilon = 1/60;
+        setTimeout(() => { this.updateCanvas(); }, 100);
     }
 
     setCutoffHz(low, high) {
         // If we try to set a cutoff above 24,000 Hz, the AudioAPI gets mad at us.
-        this.lpf.frequency.linearRampToValueAtTime(Math.min(24000, low), this.audioCtx.currentTime + this.epsilon);
-        this.hpf.frequency.linearRampToValueAtTime(Math.min(24000, high), this.audioCtx.currentTime + this.epsilon);
+        this.lpf.frequency.linearRampToValueAtTime(
+            Math.min(24000, low),
+            this.audioCtx.currentTime + this.epsilon);
+        this.hpf.frequency.linearRampToValueAtTime(
+            Math.min(24000, high),
+            this.audioCtx.currentTime + this.epsilon);
+        this.updateCanvas();
+    }
+
+    updateCanvas() {
+        const hz = new Float32Array(129);
+        for (let note = 0; note < hz.length; ++note) {
+            const f = 440 * Math.pow(2, (note - 69)/12);
+            hz[note] = f;
+        }
+        const mag = new Float32Array(hz.length);
+        const pha = new Float32Array(hz.length);
+        this.hpf.getFrequencyResponse(hz, mag, pha);
+        
+        const totalMag = new Float32Array(mag);
+        const totalPha = new Float32Array(pha);
+       this.lpf.getFrequencyResponse(hz, mag, pha);
+       for (let note = 0; note < hz.length; ++note) {
+           totalMag[note] *= mag[note];
+           totalPha[note] += pha[note];
+       }
+
+        const ctx = this.canvas.getContext('2d');
+        ctx.fillStyle = '#999';
+        ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
+        ctx.beginPath();
+        ctx.strokeStyle = '#000';
+        ctx.lineWidth = 3;
+        ctx.moveTo(0, 0);
+        for (let note = 0; note < hz.length; ++note) {
+            ctx.lineTo(totalMag[note] * (this.canvas.width * 3 / 5),
+                       (note / hz.length) * this.canvas.height);
+        }
+        ctx.stroke();
+        ctx.beginPath();
+        ctx.moveTo(0, 0);
+        ctx.lineWidth = 1;
+        ctx.strokeStyle = '#922';
+        for (let note = 0; note < hz.length; ++note) {
+            ctx.lineTo(totalPha[note] / Math.PI * (this.canvas.width * 0.5) + this.canvas.width * 0.5,
+                       (note / hz.length) * this.canvas.height);
+        }
+        ctx.stroke();
     }
 
     
     setCutoffNote(note) {
-        // We display 9 octaves of notes, so I'll set the cutoff at +/- 5 octaves.
+        // We display 9 octaves of notes, so I'll set the cutoff at +/- 3 octaves.
         // We set the low pass filter at the higher frequency.
         const noteHz = 440 * Math.pow(2, (note - 69) / 12);
-        const lowHz = noteHz * Math.pow(2, 5);
-        const highHz = noteHz * Math.pow(2, -5);
-        console.log(`Note: ${note}; low: ${lowHz}; high: ${highHz}`);
+        const lowHz = noteHz * Math.pow(2, 3);
+        const highHz = noteHz * Math.pow(2, -3);
+        // console.log(`Note: ${note}; low: ${lowHz}; high: ${highHz}`);
         this.setCutoffHz(lowHz, highHz);
     }
 
