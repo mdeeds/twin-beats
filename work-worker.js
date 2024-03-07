@@ -1,14 +1,26 @@
 class RecorderWorklet extends AudioWorkletProcessor {
     constructor() {
-        super();
-        this.bufferSize = Math.round(sampleRate * 4);
-        this.buffer = new Float32Array(this.bufferSize);
-        this.writeIndex = 0;
+        super();        
         this.lastPlayValue = 0;
         this.lastRecordValue = 0;
         this.stopped = true;
         this.loopSizeSamples = 0;
         this.loopSizeSet = false;
+        
+        this.returnBuffer = null;
+        this.nextBuffer = null;
+        this.returnIndex = 0;
+
+        this.port.onmessage = (e) => {
+            // console.log(e.data.command);
+            if (e.data.command === 'ready' && this.returnBuffer == null) {
+                this.returnBuffer = new Float32Array(e.data.buffer);
+                this.nextBuffer = new Float32Array(e.data.nextBuffer);
+                this.returnIndex = 0;
+            } else if (e.data.command === 'done' && this.nextBuffer == null) {
+                this.nextBuffer = new Float32Array(e.data.buffer);
+            }
+        };
     }
     
     static get parameterDescriptors() {
@@ -40,17 +52,29 @@ class RecorderWorklet extends AudioWorkletProcessor {
             const currentRecordValue = recordParam.length == 1 ? recordParam[0] : recordParam[i];
             if (currentRecordValue > 0 && this.lastRecordValue <= 0) {
                 console.log(`Start recording`);
-                this.writeIndex = 0;
                 this.lastRecordValue = 1;
             }
             if (currentRecordValue > 0) {
-                for (const input of inputs) {
-                    const inputChannel = input[0]; // TODO: Handle stereo inputs
-                    this.buffer[this.writeIndex] += inputChannel[i];
+                if (!!this.returnBuffer) {
+                    this.returnBuffer[this.returnIndex] = 0;
+                    for (const input of inputs) {
+                        const inputChannel = input[0]; // TODO: Handle stereo inputs
+                        this.returnBuffer[this.returnIndex] += inputChannel[i];
+                    }
+                    this.returnIndex++;
+                    if (this.returnIndex >= this.returnBuffer.length) {
+                        const buffer = this.returnBuffer.buffer;
+                        this.returnBuffer = this.nextBuffer;
+                        this.nextBuffer = null;
+                        this.returnIndex = 0;
+                        this.port.postMessage({command: 'return',
+                                               buffer: buffer},
+                                              [buffer]);
+                    }
+                    
                 }
                 this.loopSizeSamples++;
             }
-            this.writeIndex = (this.writeIndex + 1) % this.buffer.length;
         }
 
         const playParam = parameters["play"];

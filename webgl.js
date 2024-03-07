@@ -420,11 +420,8 @@ class Tracks {
         filter.connect(analyser);
         analyser.fftSize = 2048;
         analyser.smoothingTimeConstant = 0.4;
-        // analyser.connect(gain);
         this.analysers.push(analyser);
         // Connect analyser to new Panner  // Some weirdness happens HERE!!
-//        const gain = source.context.createGain();
-//        filter.connect(gain);
         const panner = new PannedSound(analyser);
         this.panners.push(panner);
         // Connect to speakers
@@ -489,14 +486,24 @@ class Microphone {
     async setUp() {
         await this.source.context.audioWorklet.addModule("work-worker.js");
         this.workletNode = new AudioWorkletNode(this.source.context, "recorder-worklet");
-        this.workletNode.port.onmessage = function (event) {
-            console.log(event.data);
+        this.workletNode.port.onmessage = (event) => {
+            // console.log(event.data);
+            if (event.data.command === 'return') {
+                // TODO: Process the data
+                this.workletNode.port.postMessage({command: 'done', buffer: event.data.buffer},
+                                                  [event.data.buffer]);
+            }
         };
+        // Create a new messaging buffer and release it to the worker.
+        const buffer = new Float32Array(128 * 64);
+        const nextBuffer = new Float32Array(128 * 64);
+        this.workletNode.port.postMessage(
+            {command: "ready", buffer: buffer.buffer, nextBuffer: nextBuffer.buffer},
+            [buffer.buffer, nextBuffer.buffer]);
         this.source.connect(this.workletNode);
         this.recordParam = this.workletNode.parameters.get("record");
         this.playParam = this.workletNode.parameters.get("play");
         this.state = 'paused';
-
         const transitionMap = { paused: 'record', record: 'overdub', overdub: 'play' };
         
         document.body.addEventListener('keydown', (event) => {
@@ -524,9 +531,6 @@ class Microphone {
 
         document.body.addEventListener('keyup', () => { this.lastKey = ''; });
     }
-
-    
-    
 }
 
 
