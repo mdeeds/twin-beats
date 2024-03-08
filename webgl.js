@@ -638,18 +638,123 @@ async function getAudioChirpNode() {
     return osc;
 }
 
-async function getSource(live) {
+
+class KeyboardSynth {
+    constructor(audioContext) {
+        this.audioCtx = audioContext;
+        // Create oscillator
+        this.oscillator = this.audioCtx.createOscillator();
+        this.oscillator.type = 'square';
+        // Create gain node with initial gain set to 0 (silent)
+        this.gainNode = this.audioCtx.createGain();
+        this.gainNode.gain.setValueAtTime(0, this.audioCtx.currentTime);
+        this.oscillator.connect(this.gainNode);
+        this.oscillator.start();
+        this.keyDown = false;
+
+        // Map keyboard keys to MIDI notes
+        this.keyMap = {
+            'A': 60, // C
+            'W': 61, // C#
+            'S': 62, // D
+            'E': 63, // D#
+            'D': 64, // E
+            'F': 65, // F
+            'T': 66, // F#
+            'G': 67, // G
+            'Y': 68, // G#
+            'H': 69, // A  440Hz
+            'U': 70, // A#
+            'J': 71, // B
+            'K': 72, // C
+            'O': 73, // C#
+            'L': 74, // D
+        };
+
+        // Initial octave
+        this.octave = -1;
+
+        // Attach keyboard event listeners
+        document.addEventListener('keydown', this.handleKeyDown.bind(this));
+        document.addEventListener('keyup', this.handleKeyUp.bind(this));
+    }
+
+    // Handle keydown events
+    handleKeyDown(event) {
+        const key = event.key.toUpperCase();
+        if (this.keyDown == key) { return; }
+        if (this.keyMap.hasOwnProperty(key)) {
+            const midiPitch = this.keyMap[key] + (this.octave * 12);
+            this.playNote(midiPitch);
+            this.keyDown = key;
+        } else if (key === 'ARROWUP') {
+            this.octave++;
+        } else if (key === 'ARROWDOWN') {
+            this.octave--;
+        }
+    }
+
+    // Handle keyup events
+    handleKeyUp(event) {
+        this.keyDown = false;
+        const key = event.key.toUpperCase();
+        if (this.keyMap.hasOwnProperty(key)) {
+            this.stopNote();
+        }
+    }
+
+    // Play a note with a specific MIDI pitch
+    playNote(midiPitch) {
+        const targetFrequency = Math.pow(2, ((midiPitch - 69) / 12)) * 440;
+        // Update oscillator frequency and apply gain ramp
+        this.oscillator.frequency.setValueAtTime(targetFrequency, this.audioCtx.currentTime);
+        this.gainNode.gain.cancelScheduledValues(this.audioCtx.currentTime);
+        this.gainNode.gain.linearRampToValueAtTime(1, this.audioCtx.currentTime + 0.1);
+        this.gainNode.gain.linearRampToValueAtTime(0.2, this.audioCtx.currentTime + 0.2);
+    }
+
+    // Stop playing the note (ramps gain down)
+    stopNote() {
+        this.gainNode.gain.cancelScheduledValues(this.audioCtx.currentTime);
+        this.gainNode.gain.linearRampToValueAtTime(0, this.audioCtx.currentTime + 0.5);
+    }
+
+    // Connect the gain node to the audio output
+    connect(destination) {
+        this.gainNode.connect(destination);
+    }
+    getSource() {
+        return this.gainNode;
+    }
+}
+
+
+async function getSynthNode() {
+    const s = new KeyboardSynth(new AudioContext());
+    return s.getSource();
+}
+
+async function getSource(type) {
     let source;
-    if (live) {
-        source = await getAudioSourceNode();
-    } else {
+    switch (type) {
+    case 'live':
         source = await getAudioChirpNode();
+        break;
+    case 'internal':
+        source = await getAudioSourceNode();
+        break;
+    case 'keys':
+        source = await getSynthNode();
+        break;
+    default:
+        console.error(`Unsupported type: ${type}`);
+        break;
     }
     return source;
 }
 
-init = async function(live) {
-    const source = await getSource(live);
+init = async function(type) {
+    const source = await getSource(type);
     const mic = new Microphone(source);
     await runRenderLoop(source);
 }
@@ -664,15 +769,28 @@ go = async function() {
     liveButton.innerText = 'Live';
     document.body.appendChild(liveButton);
 
+    const keyButton = document.createElement('button');
+    keyButton.innerText = 'Keys';
+    document.body.appendChild(keyButton);
+
     liveButton.addEventListener('click', () => {
         document.body.removeChild(goButton);
         document.body.removeChild(liveButton);
-        init(true);
+        document.body.removeChild(keyButton);
+        init('internal');
     });
 
     goButton.addEventListener('click', () => {
         document.body.removeChild(goButton);
         document.body.removeChild(liveButton);
-        init(false);
+        document.body.removeChild(keyButton);
+        init('live');
+    });
+
+    keyButton.addEventListener('click', () => {
+        document.body.removeChild(goButton);
+        document.body.removeChild(liveButton);
+        document.body.removeChild(keyButton);
+        init('keys');
     });
 }
