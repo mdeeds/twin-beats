@@ -650,6 +650,7 @@ class KeyboardSynth {
         this.gainNode.gain.setValueAtTime(0, this.audioCtx.currentTime);
         this.oscillator.connect(this.gainNode);
         this.oscillator.start();
+        // The last key pressed.  This prevents us from triggering repeatedly when a key is held down.
         this.keyDown = false;
 
         // Map keyboard keys to MIDI notes
@@ -671,7 +672,8 @@ class KeyboardSynth {
             'L': 74, // D
         };
 
-        // Initial octave
+        // Initial octave.  We set this to -1 so the sound is a little less annoying.
+        // Middle C will initially be on the 'K' key.
         this.octave = -1;
 
         // Attach keyboard event listeners
@@ -709,6 +711,7 @@ class KeyboardSynth {
         // Update oscillator frequency and apply gain ramp
         this.oscillator.frequency.setValueAtTime(targetFrequency, this.audioCtx.currentTime);
         this.gainNode.gain.cancelScheduledValues(this.audioCtx.currentTime);
+        // Attack and initial decay to a sustain level of 0.2
         this.gainNode.gain.linearRampToValueAtTime(1, this.audioCtx.currentTime + 0.1);
         this.gainNode.gain.linearRampToValueAtTime(0.2, this.audioCtx.currentTime + 0.2);
     }
@@ -716,6 +719,7 @@ class KeyboardSynth {
     // Stop playing the note (ramps gain down)
     stopNote() {
         this.gainNode.gain.cancelScheduledValues(this.audioCtx.currentTime);
+        // Release 0.5 seconds
         this.gainNode.gain.linearRampToValueAtTime(0, this.audioCtx.currentTime + 0.5);
     }
 
