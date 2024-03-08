@@ -82,7 +82,7 @@ class RecorderWorklet extends AudioWorkletProcessor {
             const currentPlayParam = playParam.length == 1 ? playParam[0] : playParam[i];
             if (this.lastPlayValue <= 0 && currentPlayParam > 0) {
                 // Rising edge, set the loop length
-                console.log('Start looping');
+                console.log(`Start looping ${this.lastPlayValue} -> ${currentPlayParam}`);
                 this.loopSizeSet = true;
                 this.loopSizeSamples -= (frameSize - i);
                 const message = { command: "loopSizeSamples", value: this.loopSizeSamples };

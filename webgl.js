@@ -504,7 +504,7 @@ class Microphone {
         this.recordParam = this.workletNode.parameters.get("record");
         this.playParam = this.workletNode.parameters.get("play");
         this.state = 'paused';
-        const transitionMap = { paused: 'record', record: 'overdub', overdub: 'play' };
+        const transitionMap = { paused: 'record', record: 'overdub', overdub: 'play', play: 'overdub' };
         
         document.body.addEventListener('keydown', (event) => {
             // I think I want to change this so there is no overdub
@@ -515,17 +515,31 @@ class Microphone {
             if (this.lastKey == event.code) return;
             this.lastKey = event.code;
             if (event.code == 'Space') {
+                if (!transitionMap.hasOwnProperty(this.state)) return;
                 this.state = transitionMap[this.state];
+            } else {
+                return;
             }
-            if (this.state == 'record') {
+            switch (this.state) {
+            case 'record':
+                console.log('Entering record state.');
                 this.recordParam.setValueAtTime(1, this.source.context.currentTime);
                 this.playParam.setValueAtTime(0, this.source.context.currentTime);
-            } else if (this.state = 'overdub') {
+                break;
+            case 'overdub':
+                console.log('Entering overdub state.');
                 this.recordParam.setValueAtTime(1, this.source.context.currentTime);
                 this.playParam.setValueAtTime(1, this.source.context.currentTime);
-            } else if (this.state = 'play') {
+                break;
+            case 'play':
+                console.log('Entering play state.');
                 this.recordParam.setValueAtTime(0, this.source.context.currentTime);
                 this.playParam.setValueAtTime(1, this.source.context.currentTime);
+                break;
+            case 'paused': break;
+            default:
+                console.error(`Invalid state: ${this.state}`);
+                break;
             }
         });
 
