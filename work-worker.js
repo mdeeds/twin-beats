@@ -96,3 +96,89 @@ class RecorderWorklet extends AudioWorkletProcessor {
 }
 
 registerProcessor("recorder-worklet", RecorderWorklet);
+
+
+// The mutable audio buffer source can be modified during playback. Also, unlike the AudioBufferSourceNode
+// it can be triggered multiple times.
+// The a-rate parameter `trigger` will restart playback when its value transitions from zero to one.
+// The playback loop length can be set by posting a message {command: 'setLength', value: lengthInSamples}
+// Data in the playback buffer can be modified by posting a message:
+// {command: 'set', offset: startOffsetInSamples, buffer: arrayBufferOfFloat32}
+// The MutableAudioBufferSource has no inputs and one single channel output.
+class MutableAudioBufferSource extends AudioWorkletProcessor {
+  constructor() {
+    super();
+
+    // Properties for buffer and playback state
+      this.buffer = new Float32Array(Math.round(3 * sampleRate));
+    this.playbackPosition = 0;
+    this.loopLength = 0;
+    this.isPlaying = false;
+
+    this.port.onmessage = (event) => {
+      const message = event.data;
+      switch (message.command) {
+        case 'setLength':
+          this.loopLength = message.value;
+          break;
+        case 'set':
+          this.setBufferData(message.offset, message.buffer);
+          break;
+        default:
+          // Handle any other commands if needed
+          break;
+      }
+    };
+  }
+
+  process(inputs, outputs, parameters) {
+    const output = outputs[0];
+
+    // Check for trigger parameter change
+    if (parameters.trigger[0] > 0 && !this.isPlaying) {
+      this.playbackPosition = 0;
+      this.isPlaying = true;
+    }
+
+    if (this.isPlaying && this.buffer !== null) {
+      const frameCount = output.length;
+      const outputChannel = output[0];
+
+      for (let i = 0; i < frameCount; i++) {
+        const sample = this.buffer[this.playbackPosition]; // Access buffer data
+        outputChannel[i] = sample;
+
+        this.playbackPosition++;
+
+        // Handle loop playback
+        if (this.playbackPosition >= this.buffer.length) {
+          if (this.loopLength > 0) {
+            this.playbackPosition = 0; // Loop back to beginning
+          } else {
+            this.isPlaying = false; // Stop playback if no loop
+          }
+        }
+      }
+    } else {
+      // Silent output if not playing or no buffer
+      output[0].fill(0);
+    }
+
+    return true;
+  }
+
+  setBufferData(offset, arrayBuffer) {
+      const view = new Float32Array(arrayBuffer);
+      if (offset + view.length > this.buffer.length) {
+          // TODO: Grow the buffer by 1 second plus the required length for the new data.
+      }
+    if (this.buffer === null) {
+      this.buffer = view;
+    } else {
+      // Copy new data into existing buffer, adjusting offset
+      this.buffer.set(view, offset);
+    }
+  }
+}
+
+registerProcessor("mutable-audio-buffer-worklet", MutableAudioBufferSource);
