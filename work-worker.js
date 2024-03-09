@@ -106,79 +106,92 @@ registerProcessor("recorder-worklet", RecorderWorklet);
 // {command: 'set', offset: startOffsetInSamples, buffer: arrayBufferOfFloat32}
 // The MutableAudioBufferSource has no inputs and one single channel output.
 class MutableAudioBufferSource extends AudioWorkletProcessor {
-  constructor() {
-    super();
+    constructor() {
+        super();
 
-    // Properties for buffer and playback state
-      this.buffer = new Float32Array(Math.round(3 * sampleRate));
-    this.playbackPosition = 0;
-    this.loopLength = 0;
-    this.isPlaying = false;
-
-    this.port.onmessage = (event) => {
-      const message = event.data;
-      switch (message.command) {
-        case 'setLength':
-          this.loopLength = message.value;
-          break;
-        case 'set':
-          this.setBufferData(message.offset, message.buffer);
-          break;
-        default:
-          // Handle any other commands if needed
-          break;
-      }
-    };
-  }
-
-  process(inputs, outputs, parameters) {
-    const output = outputs[0];
-
-    // Check for trigger parameter change
-    if (parameters.trigger[0] > 0 && !this.isPlaying) {
-      this.playbackPosition = 0;
-      this.isPlaying = true;
+        // Properties for buffer and playback state
+        this.buffer = new Float32Array(Math.round(3 * sampleRate));
+        this.playbackPosition = 0;
+        this.writeOffset = 0;
+        this.loopLength = 0;
+        this.isPlaying = false;
+        this.previousTriggerValue = 0;
+        
+        this.port.onmessage = (event) => {
+            const message = event.data;
+            switch (message.command) {
+            case 'setLoopSizeamples':
+                this.loopLength = message.value;
+                break;
+            case 'append':
+                this.appendBufferData(message.buffer);
+                break;
+            default:
+                // Handle any other commands if needed
+                break;
+            }
+        };
     }
 
-    if (this.isPlaying && this.buffer !== null) {
-      const frameCount = output.length;
-      const outputChannel = output[0];
+    static get parameterDescriptors() {
+        return [
+            {
+                name: "trigger",
+                defaultValue: 0,
+                minValue: 0,
+                maxValue: 1,
+                automationRate: "a-rate",
+            },
+            {
+                name: "stop",
+                defaultValue: 0,
+                minValue: 0,
+                maxValue: 1,
+                automationRate: "k-rate",
+            },
+        ];
+    }
 
-      for (let i = 0; i < frameCount; i++) {
-        const sample = this.buffer[this.playbackPosition]; // Access buffer data
-        outputChannel[i] = sample;
 
-        this.playbackPosition++;
-
-        // Handle loop playback
-        if (this.playbackPosition >= this.buffer.length) {
-          if (this.loopLength > 0) {
-            this.playbackPosition = 0; // Loop back to beginning
-          } else {
-            this.isPlaying = false; // Stop playback if no loop
-          }
+    process(inputs, outputs, parameters) {
+        const output = outputs[0];
+        const frameCount = output.length;
+        const outputChannel = output[0];
+        const triggerParameter = parameters.trigger;
+        // TODO: handle k-rate stop.
+        
+        for (let i = 0; i < frameCount; ++i) {
+            const currentTriggerValue =
+                  (triggerParameter.length == 1) ? triggerParameter[0] : triggerParameter[i];
+            if (currentTriggerValue > 0 && this.previousTriggerValue <= 0) {
+                this.playbackPosition = 0;
+                this.isPlaying = true;
+            }
+            this.previousTriggerValue = currentTriggerValue;
+            if (this.isPlaying) {
+                if (!this.loopLength || this.playbackPosition < this.loopLength) {
+                    const sample = this.buffer[this.playbackPosition];
+                    outputChannel[i] = sample;
+                } else {
+                    outputChannel[i] = 0;
+                }
+                this.playbackPosition++;
+            }
         }
-      }
-    } else {
-      // Silent output if not playing or no buffer
-      output[0].fill(0);
+        return true;
     }
-
-    return true;
-  }
-
-  setBufferData(offset, arrayBuffer) {
-      const view = new Float32Array(arrayBuffer);
-      if (offset + view.length > this.buffer.length) {
-          // TODO: Grow the buffer by 1 second plus the required length for the new data.
-      }
-    if (this.buffer === null) {
-      this.buffer = view;
-    } else {
-      // Copy new data into existing buffer, adjusting offset
-      this.buffer.set(view, offset);
+    
+    setBufferData(arrayBuffer) {
+        const view = new Float32Array(arrayBuffer);
+        if (this.writeOffset + view.length > this.buffer.length) {
+            const newSize = this.writeOffset + view.length + sampleRate;
+            const newBuffer = new Float32Array(newSize);
+            newBuffer.set(this.buffer);
+            this.buffer = newBuffer;
+        }
+        this.buffer.set(view, this.writeOffset);
+        this.writeOffset += view.length;
     }
-  }
 }
 
 registerProcessor("mutable-audio-buffer-worklet", MutableAudioBufferSource);

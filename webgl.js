@@ -485,24 +485,37 @@ class Microphone {
 
     async setUp() {
         await this.source.context.audioWorklet.addModule("work-worker.js");
-        this.workletNode = new AudioWorkletNode(this.source.context, "recorder-worklet");
-        this.workletNode.port.onmessage = (event) => {
+        this.workletRecorder = new AudioWorkletNode(
+            this.source.context, "recorder-worklet");
+        this.workletPlayback = new AudioWorkletNode(
+            this.source.context, "mutable-audio-buffer-worklet");
+        
+        this.workletRecorder.port.onmessage = (event) => {
             // console.log(event.data);
-            if (event.data.command === 'return') {
-                // TODO: Process the data
-                this.workletNode.port.postMessage({command: 'done', buffer: event.data.buffer},
-                                                  [event.data.buffer]);
+            switch (event.data.command) {
+            case 'return':
+                this.workletPlayback.port.postMessage(
+                    {command: 'append', buffer: event.data.buffer});
+                this.workletRecorder.port.postMessage(
+                    {command: 'done', buffer: event.data.buffer}, [event.data.buffer]);
+                break;
+            case 'loopSizeSamples':
+                this.workletPlayback.port.postMessage(
+                    {command: 'setLoopSizeamples', value: event.data.value});
+                break;
+            default:
+                console.error(`Unknown command: ${event.data.command}`);
             }
         };
         // Create a new messaging buffer and release it to the worker.
         const buffer = new Float32Array(128 * 64);
         const nextBuffer = new Float32Array(128 * 64);
-        this.workletNode.port.postMessage(
+        this.workletRecorder.port.postMessage(
             {command: "ready", buffer: buffer.buffer, nextBuffer: nextBuffer.buffer},
             [buffer.buffer, nextBuffer.buffer]);
-        this.source.connect(this.workletNode);
-        this.recordParam = this.workletNode.parameters.get("record");
-        this.playParam = this.workletNode.parameters.get("play");
+        this.source.connect(this.workletRecorder);
+        this.recordParam = this.workletRecorder.parameters.get("record");
+        this.playParam = this.workletRecorder.parameters.get("play");
         this.state = 'paused';
         const transitionMap = { paused: 'record', record: 'overdub', overdub: 'play', play: 'overdub' };
         
@@ -546,7 +559,6 @@ class Microphone {
         document.body.addEventListener('keyup', () => { this.lastKey = ''; });
     }
 }
-
 
 runRenderLoop = async function(source) {
     const canvas = document.getElementById('myCanvas');
