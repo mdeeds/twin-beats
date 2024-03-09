@@ -91,10 +91,10 @@ vec3 fg(in float note, in int bubble, in float pan, in vec2 bubbleXY) {
   if (t > mag) {
     float q = pow(t - mag, 0.1);
     return vec3(q, 0.4 * q, q);
-  } else if (t * 10.0 > mag) {
+  } else if (t * 2.0 > mag) {
     float q = pow((t * 10.0) - mag, 0.2);
     return vec3(q, 0.3 * q, 0.1 * q);
-  } else if (t * 100.0 > mag) {
+  } else if (t * 4.0 > mag) {
     float q = pow((t * 100.0) - mag, 0.2);
     return vec3(0.2 * q, 0.2 * q, q);
   } else {
