@@ -13,7 +13,7 @@ vec4 spectrogram(in vec2 posXY, in float panning, in float spectrogram[1024]) {
   return vec4(0.0);
 }
 
-#define BOTTOM_NOTE 21.0
+#define BOTTOM_NOTE 16.0
 #define TOP_NOTE 129.0
 #define BIN_COUNT 1024.0
 #define SAMPLE_RATE 44100.0
@@ -46,10 +46,10 @@ float GetPxFromNote(in float note, in float pixelSpan) {
 }
 
 // Human vocal range: MIDI 41 (G2 = 97.99Hz)
-// MIDI 103 (G7 = 3136Hz)
+// MIDI 79 (G5 = 783.99Hz)
   
 vec4 bg(in vec2 posPanNote) {
-  if (posPanNote.y < 41.0 || posPanNote.y > 103.0) {
+  if (posPanNote.y < 41.0 || posPanNote.y > 79.0) {
     return vec4(0.0, 0.0, 0.0, 1.0);
   } else {
     return vec4(0.1, 0.1, 0.1, 1.0);

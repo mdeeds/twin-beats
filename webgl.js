@@ -600,9 +600,12 @@ runRenderLoop = async function(source) {
             analyser.getFloatFrequencyData(singleSpect);
             const offset = 1024 * i;
             for (let j = 0; j < 1024; ++j) {
-                // "Decibels and Levels" by Audio Engineering Society (AES): https://aes2.org/
-                // We use 20 here because we want amplitude, not power.
-                const v = Math.pow(10, singleSpect[j] / 20);
+                // If we wanted amplitude, we would divide by 20. Instead we are plotting
+                // power, so divide by 10.  Multiply by j because the vizualization makes
+                // the lower buckets wider, so to get the number of pixels proportaionl to
+                // the power we need to multiply by the frequency.
+                // (I.e. d_bucket / d_note has a linear relationship with frequency)
+                const v = Math.pow(10, singleSpect[j] / 10) * j;
                 spectrogramData[offset + j] = Math.max(0, Math.min(255, 255 * v));
             }
             if (circles.hasChanged(i)) {
