@@ -45,10 +45,19 @@ float GetPxFromNote(in float note, in float pixelSpan) {
   return (note - BOTTOM_NOTE) / (TOP_NOTE - BOTTOM_NOTE) * pixelSpan;
 }
 
+// Human vocal range: MIDI 41 (G2 = 97.99Hz)
+// MIDI 103 (G7 = 3136Hz)
+  
 vec4 bg(in vec2 posPanNote) {
-  float c = 0.9 + 0.05 * sin(posPanNote.y / 12.0 * 3.1415 * 2.0);
-  float d = 0.9 + 0.05 * cos(3.14 * 10.0 * posPanNote.x);
-  return vec4(c, c*d, d, 1.0);
+  if (posPanNote.y < 41.0 || posPanNote.y > 103.0) {
+    return vec4(0.0, 0.0, 0.0, 1.0);
+  } else {
+    return vec4(0.1, 0.1, 0.1, 1.0);
+  }
+  //  
+  // float c = 0.9 + 0.05 * sin(posPanNote.y / 12.0 * 3.1415 * 2.0);
+  // float d = 0.9 + 0.05 * cos(3.14 * 10.0 * posPanNote.x);
+  // return vec4(c, c*d, d, 1.0);
 }
 
 float GetPanFromXY(in vec2 pos) {
@@ -80,14 +89,14 @@ vec3 fg(in float note, in int bubble, in float pan, in vec2 bubbleXY) {
   float bin = (GetBinFromHz(GetHzFromNote(note)) + 0.5) / BIN_COUNT;
   float t = texture2D(spectrogramTexture, vec2(bin, (0.5 + float(bubble)) / 16.0)).r;
   if (t > mag) {
-    float q = pow(t - mag, 0.2);
-    return vec3(q, q, q);
+    float q = pow(t - mag, 0.1);
+    return vec3(q, 0.4 * q, q);
   } else if (t * 10.0 > mag) {
     float q = pow((t * 10.0) - mag, 0.2);
-    return vec3(q, 0.0, q);
+    return vec3(q, 0.3 * q, 0.1 * q);
   } else if (t * 100.0 > mag) {
     float q = pow((t * 100.0) - mag, 0.2);
-    return vec3(q, 0.0, 0.0);
+    return vec3(0.2 * q, 0.2 * q, q);
   } else {
     return vec3(0.0, 0.0, 0.0);
   }
@@ -122,10 +131,10 @@ void main() {
 
   vec4 background;
   if (isActiveArea) {
-    background = vec4(0.9, 1.0, 1.0, 1.0);
+    background = vec4(0.0, 0.0, 0.0, 1.0);
   } else {
     vec2 posPanNote = vec2(posPan, note);
     background = bg(posPanNote);
   }
-  gl_FragColor = background - vec4(foreground, 0.0);
+  gl_FragColor = background + vec4(foreground, 0.0);
 }

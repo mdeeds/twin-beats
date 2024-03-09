@@ -573,9 +573,7 @@ runRenderLoop = async function(source) {
     const circles = new Circles(16);
     const tracks = new Tracks(16);
     tracks.add(source);
-    tracks.add(source);
     circles.add(300, 300, 50);
-    circles.add(500, 300, 40);
     canvas.addEventListener('mousedown', (event) => circles.handleMouse(event));
     canvas.addEventListener('mousemove', (event) => circles.handleMouse(event));
     canvas.addEventListener('mouseup', (event) => circles.handleMouse(event));
