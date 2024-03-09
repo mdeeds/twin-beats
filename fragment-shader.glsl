@@ -131,7 +131,7 @@ void main() {
 
   vec4 background;
   if (isActiveArea) {
-    background = vec4(0.0, 0.0, 0.0, 1.0);
+    background = vec4(0.4, 0.1, 0.12, 1.0);
   } else {
     vec2 posPanNote = vec2(posPan, note);
     background = bg(posPanNote);
