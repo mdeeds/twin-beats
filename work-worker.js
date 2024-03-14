@@ -3,6 +3,8 @@ class RecorderWorklet extends AudioWorkletProcessor {
         super();        
         this.returnBuffer = null;
         this.returnIndex = 0;
+        this.returnBufferStartFrame = 0;
+        this.returnBufferStartTime = 0;
         this.bufferPool = [];
         
         this.port.onmessage = (e) => {
@@ -27,6 +29,8 @@ class RecorderWorklet extends AudioWorkletProcessor {
                 } else {
                     this.returnBuffer = new Float32Array(64 * 128);
                 }
+                this.returnBufferStartFrame = currentFrame;
+                this.returnBufferStartTime = currentTime;
             }
             if (inputs.length == 0) {
                 this.returnBuffer.fill(/*value=*/0,
@@ -41,7 +45,9 @@ class RecorderWorklet extends AudioWorkletProcessor {
                 this.returnBuffer = null;
                 this.returnIndex = 0;
                 this.port.postMessage(
-                    {command: 'return', buffer: buffer}, [buffer]);
+                    {command: 'return', buffer: buffer,
+                     startFrame: this.returnBufferStartFrame,
+                     startTime: this.returnBufferStartTime}, [buffer]);
             }
         }
         return true;

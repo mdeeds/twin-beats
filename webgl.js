@@ -493,6 +493,8 @@ class Microphone {
         this.activeBufferIndex = 0;
         this.currentPlaybackWorklet = null;
         this.playbackWorklets = [];
+        this.startTime = -1;
+        this.startFrame = -1;
     }
 
     async setUp() {
@@ -504,6 +506,10 @@ class Microphone {
             // console.log(event.data);
             switch (event.data.command) {
             case 'return':
+                if (this.startTime < 0) {
+                    this.startTime = event.data.startTime;
+                    this.startFrame = event.data.startFrame;
+                }
                 const sampleData = new Float32Array(event.data.buffer);
                 this.activeBuffer.set(sampleData, this.activeBufferIndex);
                 if (!!this.currentPlaybackWorklet) {
