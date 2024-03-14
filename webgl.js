@@ -473,14 +473,24 @@ function findPeaks(audioData, sampleRate) {
     return processedData;
 }
 
-// An input which continuously listens to an audio signal
+// An input which continuously listens to an audio signal and saves
+// the entire stream.  Eventually this will clean up after itself with
+// some sort of LRU policy.  In float32 format an hour of recording
+// time is 635,040,000 bytes. It's less than a gig, so I think we are
+// probably safe to do this without any expulsion policy for now.
 class Microphone {
     constructor(source) {
         this.source = source;
         this.setUp();
         this.lastKey = '';
-        // Maximum buffer is 3 minutes.
-        this.activeBuffer = new Float32Array(Math.round(3 * 60 * this.source.context.sampleRate));
+        // Each buffer is about 3 minutes.
+        const eachReturnInSamples = 64 * 128;
+        const threeMinutesInSamples = 3 * 60 * this.source.context.sampleRate;
+        const approxNumberOfReturns = Math.round(threeMinutesInSamples / eachReturnInSamples);
+        this.activeBuffer = new Float32Array(approxNumberOfReturns * eachReturnInSamples);
+        this.pastBuffers = [];
+        // The index into the current active buffer where we are writing.
+        this.activeBufferIndex = 0;
     }
 
     async setUp() {
@@ -494,37 +504,30 @@ class Microphone {
             // console.log(event.data);
             switch (event.data.command) {
             case 'return':
-                this.workletPlayback.port.postMessage(
-                    {command: 'append', buffer: event.data.buffer});
+                const sampleData = new Float32Array(event.data.buffer);
+                this.activeBuffer.set(sampleData, this.activeBufferIndex);
                 this.workletRecorder.port.postMessage(
-                    {command: 'done', buffer: event.data.buffer}, [event.data.buffer]);
-                break;
-            case 'loopSizeSamples':
-                this.workletPlayback.port.postMessage(
-                    {command: 'setLoopSizeamples', value: event.data.value});
+                    {command: 'done', buffer = event.data.buffer}, [event.data.buffer]);
+                this.activeBufferIndex += sampleData.length;
+                if (this.activeBufferIndex >= this.activeBuffer.length) {
+                    this.pastBuffers.push(this.activeBuffer);
+                    this.activeBuffer = new Float32Array(this.activeBuffer.length);
+                    this.activeBufferIndex = 0;
+                    console.log('Staring new buffer.');
+                }
                 break;
             default:
                 console.error(`Unknown command: ${event.data.command}`);
             }
         };
         // Create a new messaging buffer and release it to the worker.
-        const buffer = new Float32Array(128 * 64);
-        const nextBuffer = new Float32Array(128 * 64);
-        this.workletRecorder.port.postMessage(
-            {command: "ready", buffer: buffer.buffer, nextBuffer: nextBuffer.buffer},
-            [buffer.buffer, nextBuffer.buffer]);
+        const buffer = new Float32Array(64 * 128);
+        const nextBuffer = new Float32Array(64 * 128);
         this.source.connect(this.workletRecorder);
-        this.recordParam = this.workletRecorder.parameters.get("record");
-        this.playParam = this.workletRecorder.parameters.get("play");
         this.state = 'paused';
         const transitionMap = { paused: 'record', record: 'overdub', overdub: 'play', play: 'overdub' };
         
         document.body.addEventListener('keydown', (event) => {
-            // I think I want to change this so there is no overdub
-            // mode.  Instead, the second press just sets the loop
-            // length and it continues to dump out tracks at that
-            // cadence.  The next press will stop dumping tracks.
-            // Conceptually, very similar, but there isn't a "play" mode.
             if (this.lastKey == event.code) return;
             this.lastKey = event.code;
             if (event.code == 'Space') {
@@ -536,18 +539,15 @@ class Microphone {
             switch (this.state) {
             case 'record':
                 console.log('Entering record state.');
-                this.recordParam.setValueAtTime(1, this.source.context.currentTime);
-                this.playParam.setValueAtTime(0, this.source.context.currentTime);
+                // TODO: create a new playback node and stream any required past bytes to it.
                 break;
             case 'overdub':
                 console.log('Entering overdub state.');
-                this.recordParam.setValueAtTime(1, this.source.context.currentTime);
-                this.playParam.setValueAtTime(1, this.source.context.currentTime);
+                // TODO: same as above, also save the playback node somewhere.
                 break;
             case 'play':
                 console.log('Entering play state.');
-                this.recordParam.setValueAtTime(0, this.source.context.currentTime);
-                this.playParam.setValueAtTime(1, this.source.context.currentTime);
+                // TODO: stop creating new playback nodes.
                 break;
             case 'paused': break;
             default:
