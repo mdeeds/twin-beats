@@ -491,14 +491,14 @@ class Microphone {
         this.pastBuffers = [];
         // The index into the current active buffer where we are writing.
         this.activeBufferIndex = 0;
+        this.currentPlaybackWorklet = null;
+        this.playbackWorklets = [];
     }
 
     async setUp() {
         await this.source.context.audioWorklet.addModule("work-worker.js");
         this.workletRecorder = new AudioWorkletNode(
             this.source.context, "recorder-worklet");
-        this.workletPlayback = new AudioWorkletNode(
-            this.source.context, "mutable-audio-buffer-worklet");
         
         this.workletRecorder.port.onmessage = (event) => {
             // console.log(event.data);
@@ -506,6 +506,10 @@ class Microphone {
             case 'return':
                 const sampleData = new Float32Array(event.data.buffer);
                 this.activeBuffer.set(sampleData, this.activeBufferIndex);
+                if (!!this.currentPlaybackWorklet) {
+                    this.currentPlaybackWorklet.port.postMessage(
+                        {command: 'append', buffer: event.data.buffer});
+                }
                 this.workletRecorder.port.postMessage(
                     {command: 'done', buffer: event.data.buffer}, [event.data.buffer]);
                 this.activeBufferIndex += sampleData.length;
@@ -539,7 +543,12 @@ class Microphone {
             switch (this.state) {
             case 'record':
                 console.log('Entering record state.');
-                // TODO: create a new playback node and stream any required past bytes to it.
+                if (!!this.currentPlaybackWorklet) {
+                    this.playbackWorklets.push(this.currentPlaybackWorklets);
+                }
+                this.currentPlaybackWorklet =
+                    new AudioWorkletNode(this.source.context, "mutable-audio-buffer-worklet");
+                // TODO: shove some prefix bytes into the playback worklet
                 break;
             case 'overdub':
                 console.log('Entering overdub state.');

@@ -74,6 +74,7 @@ class MutableAudioBufferSource extends AudioWorkletProcessor {
         this.port.onmessage = (event) => {
             const message = event.data;
             switch (message.command) {
+                // I want to change this to setA and setB to set the loop start and end points.
             case 'setLoopSizeamples':
                 this.loopLength = message.value;
                 break;
