@@ -507,7 +507,7 @@ class Microphone {
                 const sampleData = new Float32Array(event.data.buffer);
                 this.activeBuffer.set(sampleData, this.activeBufferIndex);
                 this.workletRecorder.port.postMessage(
-                    {command: 'done', buffer = event.data.buffer}, [event.data.buffer]);
+                    {command: 'done', buffer: event.data.buffer}, [event.data.buffer]);
                 this.activeBufferIndex += sampleData.length;
                 if (this.activeBufferIndex >= this.activeBuffer.length) {
                     this.pastBuffers.push(this.activeBuffer);
@@ -555,7 +555,7 @@ class Microphone {
                 break;
             }
         });
-
+        
         document.body.addEventListener('keyup', () => { this.lastKey = ''; });
     }
 }

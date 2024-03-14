@@ -4,7 +4,7 @@ class RecorderWorklet extends AudioWorkletProcessor {
         this.returnBuffer = null;
         this.returnIndex = 0;
         this.bufferPool = [];
-
+        
         this.port.onmessage = (e) => {
             if (e.data.command === 'done') {
                 this.bufferPool.push(new Float32Array(e.data.buffer));
@@ -15,7 +15,7 @@ class RecorderWorklet extends AudioWorkletProcessor {
     static get parameterDescriptors() {
         return [];
     }
-
+    
     process(inputs, outputs, parameters) {
         // Hard code the frame size.  It seems like this will never change.
         // See https://developer.mozilla.org/en-US/docs/Web/API/AudioWorkletGlobalScope/currentFrame
@@ -23,9 +23,10 @@ class RecorderWorklet extends AudioWorkletProcessor {
         for (let i = 0; i < frameSize; ++i) {
             if (!this.returnBuffer) {
                 if (this.bufferPool.length > 0) {
-                    this.returnBuffer = this.bufferPool.pop());
-            } else {
-                this.returnBuffer = new Float32Array(64 * 128);
+                    this.returnBuffer = this.bufferPool.pop();
+                } else {
+                    this.returnBuffer = new Float32Array(64 * 128);
+                }
             }
             if (inputs.length == 0) {
                 this.returnBuffer.fill(/*value=*/0,
@@ -60,7 +61,7 @@ registerProcessor("recorder-worklet", RecorderWorklet);
 class MutableAudioBufferSource extends AudioWorkletProcessor {
     constructor() {
         super();
-
+        
         // Properties for buffer and playback state
         this.buffer = new Float32Array(Math.round(3 * sampleRate));
         this.playbackPosition = 0;
@@ -90,12 +91,12 @@ class MutableAudioBufferSource extends AudioWorkletProcessor {
             }
         };
     }
-
+    
     static get parameterDescriptors() {
         return [];
     }
-
-
+    
+    
     process(inputs, outputs, parameters) {
         const output = outputs[0];
         const frameCount = output.length;
