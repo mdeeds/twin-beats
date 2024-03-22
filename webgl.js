@@ -483,18 +483,7 @@ class Microphone {
         this.source = source;
         this.setUp();
         this.lastKey = '';
-        // Each buffer is about 3 minutes.
-        const eachReturnInSamples = 64 * 128;
-        const threeMinutesInSamples = 3 * 60 * this.source.context.sampleRate;
-        const approxNumberOfReturns = Math.round(threeMinutesInSamples / eachReturnInSamples);
-        this.activeBuffer = new Float32Array(approxNumberOfReturns * eachReturnInSamples);
-        this.pastBuffers = [];
-        // The index into the current active buffer where we are writing.
-        this.activeBufferIndex = 0;
-        this.currentPlaybackWorklet = null;
-        this.playbackWorklets = [];
-        this.startTime = -1;
-        this.startFrame = -1;
+        this.recordStartTime = -1;
     }
 
     async setUp() {
@@ -505,27 +494,6 @@ class Microphone {
         this.workletRecorder.port.onmessage = (event) => {
             // console.log(event.data);
             switch (event.data.command) {
-            case 'return':
-                if (this.startTime < 0) {
-                    this.startTime = event.data.startTime;
-                    this.startFrame = event.data.startFrame;
-                }
-                const sampleData = new Float32Array(event.data.buffer);
-                this.activeBuffer.set(sampleData, this.activeBufferIndex);
-                if (!!this.currentPlaybackWorklet) {
-                    this.currentPlaybackWorklet.port.postMessage(
-                        {command: 'append', buffer: event.data.buffer});
-                }
-                this.workletRecorder.port.postMessage(
-                    {command: 'done', buffer: event.data.buffer}, [event.data.buffer]);
-                this.activeBufferIndex += sampleData.length;
-                if (this.activeBufferIndex >= this.activeBuffer.length) {
-                    this.pastBuffers.push(this.activeBuffer);
-                    this.activeBuffer = new Float32Array(this.activeBuffer.length);
-                    this.activeBufferIndex = 0;
-                    console.log('Staring new buffer.');
-                }
-                break;
             default:
                 console.error(`Unknown command: ${event.data.command}`);
             }
@@ -534,6 +502,11 @@ class Microphone {
         const buffer = new Float32Array(64 * 128);
         const nextBuffer = new Float32Array(64 * 128);
         this.source.connect(this.workletRecorder);
+
+        // TODO: run this through a bubble.
+        this.workletRecorder.connect(this.source.context.destination);
+        
+        
         this.state = 'paused';
         const transitionMap = { paused: 'record', record: 'overdub', overdub: 'play', play: 'overdub' };
         
@@ -548,17 +521,17 @@ class Microphone {
             }
             switch (this.state) {
             case 'record':
+                this.recordStartTime = this.source.context.currentTime;
                 console.log('Entering record state.');
-                if (!!this.currentPlaybackWorklet) {
-                    this.playbackWorklets.push(this.currentPlaybackWorklets);
-                }
-                this.currentPlaybackWorklet =
-                    new AudioWorkletNode(this.source.context, "mutable-audio-buffer-worklet");
-                // TODO: shove some prefix bytes into the playback worklet
                 break;
             case 'overdub':
                 console.log('Entering overdub state.');
-                // TODO: same as above, also save the playback node somewhere.
+                // TODO: Start the current playback node with the current time.
+                const playbackStartTime = this.source.context.currentTime;
+                const loopLength = playbackStartTime - this.recordStartTime;
+                this.workletRecorder.port.postMessage(
+                    {command: 'loop', index: 0,
+                     startTime: this.recordStartTime, endTime: this.recordStartTime + loopLength});
                 break;
             case 'play':
                 console.log('Entering play state.');
@@ -573,9 +546,14 @@ class Microphone {
         
         document.body.addEventListener('keyup', () => { this.lastKey = ''; });
     }
+    getOutput(outputIndex) {
+        const gainNode = this.source.context.createGain();
+        this.workletRecorder.connect(gainNode, outputIndex);
+        return gainNode;
+    }
 }
 
-runRenderLoop = async function(source) {
+runRenderLoop = async function(source, mic) {
     const canvas = document.getElementById('myCanvas');
     const gl = canvas.getContext('webgl');    
     const program = await loadAndCompilePrograms(gl);
@@ -588,7 +566,10 @@ runRenderLoop = async function(source) {
     const circles = new Circles(16);
     const tracks = new Tracks(16);
     tracks.add(source);
-    circles.add(300, 300, 50);
+    tracks.add(mic.getOutput(0));
+    circles.add(canvas.width / 2, 300, 50);
+    circles.add(canvas.width / 2, 200, 50);
+    
     canvas.addEventListener('mousedown', (event) => circles.handleMouse(event));
     canvas.addEventListener('mousemove', (event) => circles.handleMouse(event));
     canvas.addEventListener('mouseup', (event) => circles.handleMouse(event));
@@ -802,7 +783,7 @@ async function getSource(type) {
 init = async function(type) {
     const source = await getSource(type);
     const mic = new Microphone(source);
-    await runRenderLoop(source);
+    await runRenderLoop(source, mic);
 }
 
 

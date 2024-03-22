@@ -1,15 +1,164 @@
+class InfiniteBuffer {
+    constructor() {
+        this.bufferSize = 1024 * 16;
+        this.buffers = [];
+        this.bufferPeaks = [];
+        this.bufferIndex = 0;
+        this.writeIndex = 0;
+        this.currentMax = 0;
+        this.lastReadIndex = -1;
+    }
+
+    append(buffer) {
+        if (this.bufferSize % buffer.length !== 0) {
+            console.error(`Invalid buffer size: ${buffer.length}`); 
+        }
+        for (let i = 0; i < buffer.length; ++i) {
+            this.currentMax = Math.max(this.currentMax, Math.abs(buffer[i]));
+        }
+        while (this.buffers.length <= this.bufferIndex) {
+            if (this.buffers.length > 0) {
+                const i = this.buffers.length - 1;
+                if (this.currentMax > 0) {
+                    console.log(`Peak in ${i} is ${this.currentMax}`);
+                }
+            }
+            this.bufferPeaks.push(this.currentMax);
+            this.currentMax = 0;
+            this.buffers.push(new Float32Array(this.bufferSize));
+        }
+        this.buffers[this.bufferIndex].set(buffer, this.writeIndex);
+        this.writeIndex += buffer.length;
+        if (this.writeIndex >= this.bufferSize) {
+            this.writeIndex = 0;
+            ++this.bufferIndex;
+        }
+    }
+    
+    size() {
+        return (this.buffers.length - 1) * this.bufferSize + this.writeIndex;
+    }
+
+    // Fills `targetBuffer` with data from the infinite buffer starting from
+    // `readOffset`.  Missing data in the source results in zeros written to the output.
+    writeInto(targetBuffer, readOffset) {
+        const readBufferIndex = Math.floor(readOffset / this.bufferSize);
+        if (this.lastReadIndex != readBufferIndex) {
+            console.log(`readBufferIndex: ${readBufferIndex}`);
+            this.lastReadIndex = readBufferIndex;
+        }
+        const readBufferOffset = readOffset % this.bufferSize;
+        const targetLength = targetBuffer.length;
+
+        let totalBytesRead = 0;
+        let remainingBytesToRead = targetLength;
+        let currentBufferIndex = readBufferIndex;
+        let currentBufferOffset = readBufferOffset;
+
+        // Loop until all data is read or the end of buffers is reached
+        while (remainingBytesToRead > 0 &&
+               currentBufferIndex < this.buffers.length) {
+            const bytesAvailableInCurrentBuffer =
+                  Math.min(this.bufferSize - currentBufferOffset, remainingBytesToRead);
+            const bytesToReadFromCurrentBuffer = Math.min(
+                bytesAvailableInCurrentBuffer, targetLength - totalBytesRead);
+            const targetSubarray = targetBuffer.subarray(
+                totalBytesRead, totalBytesRead + bytesToReadFromCurrentBuffer);
+            if (currentBufferIndex >= this.buffers.length ||
+                !this.buffers[currentBufferIndex]) {
+                targetSubarray.fill(0, bytesToReadFromCurrentBuffer);
+            } else {
+                targetSubarray.set(
+                    this.buffers[currentBufferIndex].subarray(
+                        currentBufferOffset, currentBufferOffset + bytesToReadFromCurrentBuffer));
+            }
+            totalBytesRead += bytesToReadFromCurrentBuffer;
+            remainingBytesToRead -= bytesToReadFromCurrentBuffer;
+
+            // Start again at the beginning of the next buffer.
+            currentBufferOffset = 0;
+            currentBufferIndex++;
+        }
+    }
+}
+
+// A circular looper which loops data specified by the loop offsets.
+class Loop {
+    constructor(infiniteBuffer) {
+        this.infiniteBuffer = infiniteBuffer;
+        this.isPlaying = false;
+        this.playIndex = 0;
+        this.startOffset = 0;
+        this.endOffset = 0;
+    }
+    play(startOffset, endOffset) {
+        this.isPlaying = true;
+        this.startOffset = startOffset;
+        this.endOffset = endOffset;
+        this.playIndex = this.startOffset;
+
+        console.log(`startOffset: ${startOffset} endOffset: ${endOffset}`);
+        console.log(`Recorded ${this.infiniteBuffer.size()} samples`);
+    }
+    // Writes data from the infinite buffer into the target
+    writeInto(targetBuffer) {
+        if (!this.isPlaying) {
+            targetBuffer.fill(0);
+            return;
+        }
+        const remainingToRead = this.endOffset - this.playIndex;
+        // If the remaining data to read is less than the target buffer size,
+        // read up to the endOffset and then loop back to the startOffset.
+        if (remainingToRead < targetBuffer.length) {
+            this.infiniteBuffer.writeInto(targetBuffer.subarray(0, remainingToRead), this.playIndex);
+            this.infiniteBuffer.writeInto(targetBuffer.subarray(remainingToRead), this.startOffset);
+            this.playIndex += targetBuffer.length;
+        } else {
+            // Read directly from playIndex to targetBuffer.
+            this.infiniteBuffer.writeInto(targetBuffer, this.playIndex);
+            this.playIndex += targetBuffer.length;
+            if (this.playIndex == this.endOffset) {
+                this.playIndex = this.startOffset;
+            }
+        }
+    }
+}
+
 class RecorderWorklet extends AudioWorkletProcessor {
     constructor() {
-        super();        
-        this.returnBuffer = null;
-        this.returnIndex = 0;
-        this.returnBufferStartFrame = 0;
-        this.returnBufferStartTime = 0;
-        this.bufferPool = [];
+        super();
+
+        this.infiniteBuffer = new InfiniteBuffer();
+        this.loops = [];
+        for (let i = 0; i < 16; ++i) {
+            this.loops.push(new Loop(this.infiniteBuffer));
+        }
+        this.outputCount = -1;
+
+        this.firstSampleStartTime = -1;
         
         this.port.onmessage = (e) => {
-            if (e.data.command === 'done') {
-                this.bufferPool.push(new Float32Array(e.data.buffer));
+            // TODO: Handle adding loops.
+            // {command: 'loop',
+            //   index: loopIndexNumber,
+            //   startTime: startTimeSeconds,
+            //   endTime: endTimeSeconds }
+            if (e.data.command === 'loop') {
+                if (e.data.index < 0 || e.data.index >= this.loops.length) {
+                    console.error(`Invalid loop number: ${e.data.index}`);
+                    return;
+                }
+                console.log(e.data);
+                console.log(`First sample start time: ${this.firstSampleStartTime}`);
+                // There might be a bug here that can result in us accumulating error
+                // when there are two loops that are the same length, but rounding makes
+                // one of them a sample shorter than the other.
+                const startIndex = Math.round(
+                    (e.data.startTime - this.firstSampleStartTime) * sampleRate);
+                const endIndex = Math.round(
+                    (e.data.endTime - this.firstSampleStartTime) * sampleRate);
+                this.loops[e.data.index].play(startIndex, endIndex);
+
             }
         };
     }
@@ -19,35 +168,20 @@ class RecorderWorklet extends AudioWorkletProcessor {
     }
     
     process(inputs, outputs, parameters) {
-        // Hard code the frame size.  It seems like this will never change.
-        // See https://developer.mozilla.org/en-US/docs/Web/API/AudioWorkletGlobalScope/currentFrame
-	      const frameSize = 128;
-        for (let i = 0; i < frameSize; ++i) {
-            if (!this.returnBuffer) {
-                if (this.bufferPool.length > 0) {
-                    this.returnBuffer = this.bufferPool.pop();
-                } else {
-                    this.returnBuffer = new Float32Array(64 * 128);
-                }
-                this.returnBufferStartFrame = currentFrame;
-                this.returnBufferStartTime = currentTime;
-            }
-            if (inputs.length == 0) {
-                this.returnBuffer.fill(/*value=*/0,
-                    /*start=*/this.returnIndex,
-                    /*end=*/ this.returnIndex + frameSize); 
-            } else {
-                this.returnBuffer.set(inputs[0][0], this.returnIndex);
-            }
-            this.returnIndex += frameSize;
-            if (this.returnIndex >= this.returnBuffer.length) {
-                const buffer = this.returnBuffer.buffer;
-                this.returnBuffer = null;
-                this.returnIndex = 0;
-                this.port.postMessage(
-                    {command: 'return', buffer: buffer,
-                     startFrame: this.returnBufferStartFrame,
-                     startTime: this.returnBufferStartTime}, [buffer]);
+        if (this.firstSampleStartTime < 0) {
+            this.firstSampleStartTime = currentTime;
+        }
+        this.infiniteBuffer.append(inputs[0][0]);
+
+        if (this.outputCount != outputs.length) {
+            this.outputCount = outputs.length;
+            console.log(`Number of outputs: ${this.outputCount}`);
+        }
+        
+        for (let i = 0; i < this.loops.length; ++i) {
+            const loop = this.loops[i];
+            if (outputs.length > i && outputs[i].length > 0) {
+                loop.writeInto(outputs[i][0]);
             }
         }
         return true;
@@ -55,89 +189,3 @@ class RecorderWorklet extends AudioWorkletProcessor {
 }
 
 registerProcessor("recorder-worklet", RecorderWorklet);
-
-
-// The mutable audio buffer source can be modified during playback. Also, unlike the AudioBufferSourceNode
-// it can be triggered multiple times.
-// The a-rate parameter `trigger` will restart playback when its value transitions from zero to one.
-// The playback loop length can be set by posting a message {command: 'setLength', value: lengthInSamples}
-// Data in the playback buffer can be modified by posting a message:
-// {command: 'set', offset: startOffsetInSamples, buffer: arrayBufferOfFloat32}
-// The MutableAudioBufferSource has no inputs and one single channel output.
-class MutableAudioBufferSource extends AudioWorkletProcessor {
-    constructor() {
-        super();
-        
-        // Properties for buffer and playback state
-        this.buffer = new Float32Array(Math.round(3 * sampleRate));
-        this.playbackPosition = 0;
-        this.writeOffset = 0;
-        this.loopLength = 0;
-        this.isPlaying = false;
-        this.startTime = 0;
-        this.previousTriggerValue = 0;
-        
-        this.port.onmessage = (event) => {
-            const message = event.data;
-            switch (message.command) {
-                // I want to change this to setA and setB to set the loop start and end points.
-            case 'setLoopSizeamples':
-                this.loopLength = message.value;
-                break;
-            case 'append':
-                this.appendBufferData(message.buffer);
-                break;
-            case 'play' :
-                this.isPlaying = true;
-                this.playbackPosition = -1;
-                this.startTime = event.data.startTime;
-                break;
-            default:
-                // Handle any other commands if needed
-                break;
-            }
-        };
-    }
-    
-    static get parameterDescriptors() {
-        return [];
-    }
-    
-    
-    process(inputs, outputs, parameters) {
-        const output = outputs[0];
-        const frameCount = output.length;
-        const outputChannel = output[0];
-        if (!this.isPlaying) {
-            output.fill(0);
-            return;
-        }
-        if (this.playbackPosition < 0) {
-            this.playbackPosition = Math.floor((currentTime - this.startTime) * sampleRate);
-        }
-        for (let i = 0; i < frameCount; ++i) {
-            if (this.playbackPosition >= 0) {
-                outputChannel[i] = this.buffer[this.playbackPosition];
-            }
-            this.playbackPosition++;
-            if (this.loopLength && this.playbackPosition > this.loopLength) {
-                this.playbackPosition = this.playbackPosition - this.loopLength;
-            }
-        }
-        return true;
-    }
-    
-    appendBufferData(arrayBuffer) {
-        const view = new Float32Array(arrayBuffer);
-        if (this.writeOffset + view.length > this.buffer.length) {
-            const newSize = this.writeOffset + view.length + sampleRate;
-            const newBuffer = new Float32Array(newSize);
-            newBuffer.set(this.buffer);
-            this.buffer = newBuffer;
-        }
-        this.buffer.set(view, this.writeOffset);
-        this.writeOffset += view.length;
-    }
-}
-
-registerProcessor("mutable-audio-buffer-worklet", MutableAudioBufferSource);
